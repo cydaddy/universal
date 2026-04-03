@@ -64,14 +64,21 @@ function init() {
 }
 
 // ── Cards ──────────────────────────────────────────────────
+let draggedCard = null;
+
 function addCard() {
     const i = $$('.question-card').length;
     const card = document.createElement('div');
     card.className = 'question-card';
     card.dataset.index = i;
+    card.draggable = true;
     card.innerHTML = `
         <div class="card-number">${i + 1}</div>
-        <button class="card-clear-btn" title="삭제">✕</button>
+        <div class="card-controls">
+            <button class="card-btn move-left" title="왼쪽으로 이동">◀</button>
+            <button class="card-btn move-right" title="오른쪽으로 이동">▶</button>
+            <button class="card-btn delete-btn" title="삭제">✕</button>
+        </div>
         <div class="upload-area" data-index="${i}">
             <div class="upload-placeholder">
                 <span class="upload-icon">📷</span>
@@ -85,16 +92,72 @@ function addCard() {
     const uploadArea = card.querySelector('.upload-area');
     const fileInput  = card.querySelector('.file-input');
     const answerIn   = card.querySelector('.answer-input');
-    const clearBtn   = card.querySelector('.card-clear-btn');
+    
+    const moveLeftBtn  = card.querySelector('.move-left');
+    const moveRightBtn = card.querySelector('.move-right');
+    const deleteBtn    = card.querySelector('.delete-btn');
 
+    // -- Movement & Deletion --
+    moveLeftBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (card.previousElementSibling) {
+            questionGrid.insertBefore(card, card.previousElementSibling);
+            updateCardNumbers();
+        }
+    });
+
+    moveRightBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (card.nextElementSibling) {
+            questionGrid.insertBefore(card.nextElementSibling, card);
+            updateCardNumbers();
+        }
+    });
+
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        card.remove();
+        updateCardNumbers();
+        updateCounter();
+        updateStartBtn();
+    });
+
+    // -- Drag & Drop Reordering (Card) --
+    card.addEventListener('dragstart', (e) => {
+        if (e.target.closest('.upload-area')) return; // Avoid conflict when trying to drag image itself? Actually card is draggable.
+        draggedCard = card;
+        card.classList.add('dragging');
+    });
+
+    card.addEventListener('dragend', () => {
+        draggedCard = null;
+        card.classList.remove('dragging');
+    });
+
+    card.addEventListener('dragover', (e) => {
+        if (!draggedCard || draggedCard === card) return; // Not sorting cards
+        e.preventDefault();
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        if (x < rect.width / 2) {
+            questionGrid.insertBefore(draggedCard, card);
+        } else {
+            questionGrid.insertBefore(draggedCard, card.nextSibling);
+        }
+        updateCardNumbers();
+    });
+
+    // -- File Upload --
     uploadArea.addEventListener('click', () => fileInput.click());
 
     uploadArea.addEventListener('dragover', (e) => {
+        if (draggedCard) return; // Let card dragover handle it
         e.preventDefault();
         uploadArea.classList.add('dragover');
     });
     uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
     uploadArea.addEventListener('drop', (e) => {
+        if (draggedCard) return;
         e.preventDefault();
         uploadArea.classList.remove('dragover');
         if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0], card);
@@ -105,15 +168,6 @@ function addCard() {
     });
 
     answerIn.addEventListener('input', () => refreshCardState(card));
-
-    clearBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // 삭제 기능으로 변경 (기존은 내용 비우기였으나 동적 추가이므로 요소 삭제)
-        card.remove();
-        updateCardNumbers();
-        updateCounter();
-        updateStartBtn();
-    });
 
     questionGrid.appendChild(card);
     updateStartBtn();

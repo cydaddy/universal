@@ -257,31 +257,54 @@ body {
     z-index: 2;
 }
 
-.card-clear-btn {
+.card-controls {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+    display: flex;
+    gap: 4px;
+    z-index: 2;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.question-card:hover .card-controls {
+    opacity: 1;
+}
+
+.card-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
     border: none;
     width: 26px;
     height: 26px;
-    border-radius: 50%;
+    border-radius: 5px;
     font-size: 0.75rem;
     cursor: pointer;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     transition: var(--transition);
-    z-index: 2;
 }
 
-.question-card.has-image .card-clear-btn {
-    display: flex;
+.card-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
-.card-clear-btn:hover {
-    background: rgba(239, 68, 68, 0.5);
+.card-btn.delete-btn {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.card-btn.delete-btn:hover {
+    background: rgba(239, 68, 68, 0.6);
+    color: #fff;
+}
+
+.question-card.dragging {
+    opacity: 0.5;
+    border-color: var(--accent-1);
+    transform: scale(0.95);
 }
 
 .upload-area {
