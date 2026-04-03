@@ -67,25 +67,19 @@ function createCards(count) {
             <div class="upload-area" data-index="${i}">
                 <div class="upload-placeholder">
                     <span class="upload-icon">📷</span>
-                    <span>클릭하여 업로드</span>
+                    <span>이미지 업로드</span>
                 </div>
-            </div>
-            <div class="filename-row">
-                <input type="text" class="filename-input" placeholder="파일명 (예: q1.jpg)" data-index="${i}">
-                <button class="filename-load-btn" title="images 폴더에서 불러오기">불러오기</button>
             </div>
             <input type="text" class="answer-input" placeholder="정답 입력" data-index="${i}">
             <input type="file" class="file-input" accept="image/*" data-index="${i}" hidden>
         `;
 
-        const uploadArea    = card.querySelector('.upload-area');
-        const fileInput     = card.querySelector('.file-input');
-        const answerIn      = card.querySelector('.answer-input');
-        const clearBtn      = card.querySelector('.card-clear-btn');
-        const filenameInput = card.querySelector('.filename-input');
-        const loadBtn       = card.querySelector('.filename-load-btn');
+        const uploadArea = card.querySelector('.upload-area');
+        const fileInput  = card.querySelector('.file-input');
+        const answerIn   = card.querySelector('.answer-input');
+        const clearBtn   = card.querySelector('.card-clear-btn');
 
-        // Click upload area → file dialog
+        // Click to upload
         uploadArea.addEventListener('click', () => fileInput.click());
 
         // Drag-and-drop
@@ -105,14 +99,6 @@ function createCards(count) {
             if (e.target.files[0]) loadImage(e.target.files[0], card);
         });
 
-        // Filename input: load on Enter
-        filenameInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') loadImageFromPath(filenameInput.value.trim(), card);
-        });
-
-        // Load button click
-        loadBtn.addEventListener('click', () => loadImageFromPath(filenameInput.value.trim(), card));
-
         // Answer input change
         answerIn.addEventListener('input', () => refreshCardState(card));
 
@@ -129,54 +115,13 @@ function createCards(count) {
 function loadImage(file, card) {
     const reader = new FileReader();
     reader.onload = (e) => {
-        setCardImage(card, e.target.result, null);
+        const area = card.querySelector('.upload-area');
+        area.innerHTML = `<img src="${e.target.result}" alt="질문 이미지">`;
+        card.dataset.imageData = e.target.result;
+        card.classList.add('has-image');
+        refreshCardState(card);
     };
     reader.readAsDataURL(file);
-}
-
-// ── Load from ./images/ folder ─────────────────────────────
-function loadImageFromPath(filename, card) {
-    if (!filename) return;
-    const path = `./images/${filename}`;
-    const img = new Image();
-    img.onload = () => {
-        setCardImage(card, null, path);
-        card.querySelector('.filename-input').value = filename;
-    };
-    img.onerror = () => {
-        showPathError(card, filename);
-    };
-    img.src = path;
-}
-
-function setCardImage(card, dataURL, path) {
-    const area = card.querySelector('.upload-area');
-    const src = dataURL || path;
-    area.innerHTML = `<img src="${src}" alt="질문 이미지">`;
-    if (dataURL) {
-        card.dataset.imageData = dataURL;
-        delete card.dataset.imagePath;
-    } else {
-        card.dataset.imagePath = path;
-        delete card.dataset.imageData;
-    }
-    card.classList.add('has-image');
-    card.classList.remove('path-error');
-    refreshCardState(card);
-}
-
-function showPathError(card, filename) {
-    const area = card.querySelector('.upload-area');
-    area.innerHTML = `
-        <div class="upload-placeholder path-error-msg">
-            <span class="upload-icon">⚠️</span>
-            <span>파일 없음: ${filename}</span>
-        </div>`;
-    card.classList.remove('has-image', 'complete');
-    delete card.dataset.imageData;
-    delete card.dataset.imagePath;
-    updateCounter();
-    updateStartBtn();
 }
 
 function clearCard(card) {
@@ -184,20 +129,18 @@ function clearCard(card) {
     area.innerHTML = `
         <div class="upload-placeholder">
             <span class="upload-icon">📷</span>
-            <span>클릭하여 업로드</span>
+            <span>이미지 업로드</span>
         </div>`;
     delete card.dataset.imageData;
-    delete card.dataset.imagePath;
     card.querySelector('.answer-input').value = '';
-    card.querySelector('.filename-input').value = '';
-    card.classList.remove('has-image', 'complete', 'path-error');
+    card.classList.remove('has-image', 'complete');
     card.querySelector('.file-input').value = '';
     updateCounter();
     updateStartBtn();
 }
 
 function refreshCardState(card) {
-    const hasImg = !!(card.dataset.imageData || card.dataset.imagePath);
+    const hasImg = !!card.dataset.imageData;
     const hasAns = card.querySelector('.answer-input').value.trim() !== '';
     card.classList.toggle('complete', hasImg && hasAns);
     updateCounter();
@@ -238,7 +181,7 @@ function handleBulkUpload(e) {
 function startQuiz() {
     state.questions = [];
     $$('.question-card').forEach((card, i) => {
-        const img = card.dataset.imageData || card.dataset.imagePath || null;
+        const img = card.dataset.imageData;
         const ans = card.querySelector('.answer-input').value.trim();
         if (img && ans) {
             state.questions.push({ number: i + 1, image: img, answer: ans });

@@ -192,7 +192,7 @@ body {
     transition: var(--transition);
     cursor: pointer;
     position: relative;
-    min-height: 250px;
+    min-height: 210px;
 }
 
 .question-card:hover {
@@ -294,67 +294,6 @@ body {
     height: 100%;
     object-fit: cover;
     border-radius: var(--radius-sm);
-}
-
-/* ---- Filename row (images folder) ---- */
-.filename-row {
-    display: flex;
-    gap: 6px;
-    width: 100%;
-}
-
-.filename-input {
-    flex: 1;
-    min-width: 0;
-    padding: 7px 8px;
-    background: var(--bg-secondary);
-    border: 1px solid rgba(99, 102, 255, 0.25);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 0.78rem;
-    font-family: 'Outfit', monospace, sans-serif;
-    outline: none;
-    transition: var(--transition);
-    text-align: left;
-}
-
-.filename-input:focus {
-    border-color: #6366f1;
-    box-shadow: 0 0 10px rgba(99, 102, 255, 0.2);
-}
-
-.filename-input::placeholder {
-    color: rgba(255, 255, 255, 0.18);
-    font-size: 0.72rem;
-}
-
-.filename-load-btn {
-    padding: 7px 10px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    font-family: 'Noto Sans KR', sans-serif;
-    background: rgba(99, 102, 255, 0.15);
-    color: #818cf8;
-    border: 1px solid rgba(99, 102, 255, 0.3);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: var(--transition);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.filename-load-btn:hover {
-    background: rgba(99, 102, 255, 0.3);
-    color: #c7d2fe;
-    border-color: #818cf8;
-}
-
-.path-error-msg {
-    color: #f87171 !important;
-}
-
-.path-error-msg .upload-icon {
-    font-size: 1.4rem;
 }
 
 /* ---- Answer input ---- */
