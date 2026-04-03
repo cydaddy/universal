@@ -37,11 +37,7 @@ const readyScreen    = $('#ready-screen');
 const realStartBtn   = $('#real-start-btn');
 const cancelStartBtn = $('#cancel-start-btn');
 
-const saveSetBtn     = $('#save-set-btn');
-const loadSetBtn     = $('#load-set-btn');
-const manualLoadBtn  = $('#manual-load-btn');
-const setFilenameIn  = $('#set-filename');
-const loadSetInput   = $('#load-set-input');
+const newSetBtn      = $('#new-set-btn');
 const pauseBtn       = $('#pause-btn');
 const stopBtn        = $('#stop-btn');
 
@@ -63,17 +59,13 @@ function init() {
         state.timerDuration = Math.max(1, parseInt(timerInput.value) || 5);
     });
 
-    saveSetBtn.addEventListener('click', saveSet);
-    loadSetBtn.addEventListener('click', loadSetFromFolder);
-    manualLoadBtn.addEventListener('click', () => loadSetInput.click());
-    loadSetInput.addEventListener('change', loadSetFromFile);
-    
-    setFilenameIn.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') loadSetFromFolder();
-    });
+    newSetBtn.addEventListener('click', clearAllData);
 
     pauseBtn.addEventListener('click', togglePause);
     stopBtn.addEventListener('click', restart);
+
+    // Initial load map
+    loadFromLocalStorage();
 }
 
 // ── Cards ──────────────────────────────────────────────────
@@ -116,6 +108,7 @@ function addCard() {
         if (card.previousElementSibling) {
             questionGrid.insertBefore(card, card.previousElementSibling);
             updateCardNumbers();
+            autoSave();
         }
     });
 
@@ -124,6 +117,7 @@ function addCard() {
         if (card.nextElementSibling) {
             questionGrid.insertBefore(card.nextElementSibling, card);
             updateCardNumbers();
+            autoSave();
         }
     });
 
@@ -133,6 +127,7 @@ function addCard() {
         updateCardNumbers();
         updateCounter();
         updateStartBtn();
+        autoSave();
     });
 
     // -- Drag & Drop Reordering (Card) --
@@ -158,6 +153,7 @@ function addCard() {
             questionGrid.insertBefore(draggedCard, card.nextSibling);
         }
         updateCardNumbers();
+        autoSave();
     });
 
     // -- File Upload --
@@ -180,10 +176,14 @@ function addCard() {
         if (e.target.files[0]) loadImage(e.target.files[0], card);
     });
 
-    answerIn.addEventListener('input', () => refreshCardState(card));
+    answerIn.addEventListener('input', () => {
+        refreshCardState(card);
+        autoSave();
+    });
 
     questionGrid.appendChild(card);
     updateStartBtn();
+    autoSave();
 }
 
 function updateCardNumbers() {
@@ -201,6 +201,7 @@ function loadImage(file, card) {
         card.dataset.imageData = e.target.result;
         card.classList.add('has-image');
         refreshCardState(card);
+        autoSave();
     };
     reader.readAsDataURL(file);
 }
@@ -266,8 +267,9 @@ function handleBulkUpload(e) {
     bulkFileInput.value = '';
 }
 
-// ── Save & Load Set ────────────────────────────────────────
-function saveSet() {
+// ── Auto Save & Load ───────────────────────────────────────
+function autoSave() {
+    // Collect all card data
     const data = [];
     $$('.question-card').forEach((card) => {
         const img = card.dataset.imageData;
@@ -277,53 +279,39 @@ function saveSet() {
         }
     });
 
-    if (data.length === 0) {
-        alert('저장할 데이터가 없습니다.');
-        return;
+    try {
+        localStorage.setItem('pictureQuizCurrentSet', JSON.stringify(data));
+    } catch (err) {
+        console.warn('LocalStorage save failed:', err);
+        // Might be out of space if images are too large
     }
-
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `picture_quiz_set_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
 }
 
-function loadSetFromFolder() {
-    let filename = setFilenameIn.value.trim();
-    if (!filename) return;
-    if (!filename.endsWith('.json')) filename += '.json';
-
-    fetch(`./sets/${filename}`)
-        .then(res => {
-            if (!res.ok) throw new Error('File not found');
-            return res.json();
-        })
-        .then(data => {
-            populateCards(data);
-        })
-        .catch(err => {
-            alert(`세트 '${filename}'을 불러올 수 없습니다.\n파일이 없거나 브라우저 보안 정책으로 인해 차단되었습니다.\n\n해결 방법: 📁 버튼을 눌러 직접 파일을 선택해 주세요.`);
-        });
-}
-
-function loadSetFromFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        try {
-            const data = JSON.parse(ev.target.result);
-            populateCards(data);
-        } catch (err) {
-            alert('유효하지 않은 세트 파일이거나 오류가 발생했습니다.');
+function loadFromLocalStorage() {
+    try {
+        const saved = localStorage.getItem('pictureQuizCurrentSet');
+        if (saved) {
+            const data = JSON.parse(saved);
+            if (Array.isArray(data) && data.length > 0) {
+                populateCards(data);
+                return;
+            }
         }
-        loadSetInput.value = '';
-    };
-    reader.readAsText(file);
+    } catch (err) {
+        console.error('Failed to load from local storage', err);
+    }
+    // Fallback if empty or failed
+    questionGrid.innerHTML = '';
+    addCard();
+}
+
+function clearAllData() {
+    if (!confirm('현재 작성된 모든 문제와 이미지를 삭제하고 완전히 초기화하시겠습니까?')) return;
+    localStorage.removeItem('pictureQuizCurrentSet');
+    questionGrid.innerHTML = '';
+    addCard();
+    updateStartBtn();
+    updateCounter();
 }
 
 function populateCards(data) {
