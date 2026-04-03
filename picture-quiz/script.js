@@ -260,25 +260,50 @@ function handleBulkUpload(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    files.forEach((file) => {
+    // 비동기 순차 처리: 하나씩 차례로 로드해야 카드 배정이 정확함
+    function processNext(index) {
+        if (index >= files.length) {
+            bulkFileInput.value = '';
+            return;
+        }
+
+        const file = files[index];
+
+        // 이미지 없는 카드 중 첫 번째를 찾음
         let targetCard = null;
         $$('.question-card').forEach(card => {
             if (!targetCard && !card.dataset.imageData) {
                 targetCard = card;
             }
         });
-        
+
         if (!targetCard) {
             addCard();
             const all = $$('.question-card');
             targetCard = all[all.length - 1];
         }
 
-        loadImage(file, targetCard);
-    });
+        // 이 파일 로드가 완료된 후 다음 파일 처리
+        loadImageThen(file, targetCard, () => processNext(index + 1));
+    }
 
-    // Reset so same files can be re-selected
-    bulkFileInput.value = '';
+    processNext(0);
+}
+
+// 이미지 로드 후 콜백 지원 버전
+function loadImageThen(file, card, callback) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const area = card.querySelector('.upload-area');
+        area.innerHTML = `<img src="${e.target.result}" alt="질문 이미지">`;
+        card.dataset.imageData = e.target.result;
+        card.classList.add('has-image');
+        refreshCardState(card);
+        ensureEmptyCardAtEnd();
+        autoSave();
+        if (callback) callback();
+    };
+    reader.readAsDataURL(file);
 }
 
 // ── Auto Save & Load ───────────────────────────────────────
