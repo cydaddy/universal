@@ -32,10 +32,10 @@ const quizProgress   = $('#quiz-progress');
 const quizImage      = $('#quiz-image');
 const bombContainer  = $('#bomb-container');
 const answerOverlay  = $('#answer-overlay');
-const addCardBtn     = $('#add-card-btn');
 const readyScreen    = $('#ready-screen');
 const realStartBtn   = $('#real-start-btn');
 const cancelStartBtn = $('#cancel-start-btn');
+
 
 const newSetBtn      = $('#new-set-btn');
 const pauseBtn       = $('#pause-btn');
@@ -43,18 +43,18 @@ const stopBtn        = $('#stop-btn');
 
 // ── Initialise ─────────────────────────────────────────────
 function init() {
-    // Add 1 initial card
-    addCard();
-
-    addCardBtn.addEventListener('click', () => addCard());
+    // Initial load map
+    loadFromLocalStorage();
 
     startBtn.addEventListener('click', prepareQuiz);
     realStartBtn.addEventListener('click', startQuiz);
     cancelStartBtn.addEventListener('click', () => switchScreen(setupScreen));
     nextBtn.addEventListener('click', nextQuestion);
     restartBtn.addEventListener('click', restart);
+    
     bulkBtn.addEventListener('click', () => bulkFileInput.click());
     bulkFileInput.addEventListener('change', handleBulkUpload);
+    
     timerInput.addEventListener('input', () => {
         state.timerDuration = Math.max(1, parseInt(timerInput.value) || 5);
     });
@@ -63,9 +63,21 @@ function init() {
 
     pauseBtn.addEventListener('click', togglePause);
     stopBtn.addEventListener('click', restart);
+}
 
-    // Initial load map
-    loadFromLocalStorage();
+function ensureEmptyCardAtEnd() {
+    const cards = $$('.question-card');
+    if (cards.length === 0) {
+        addCard();
+        return;
+    }
+    const lastCard = cards[cards.length - 1];
+    const img = lastCard.dataset.imageData;
+    const ans = lastCard.querySelector('.answer-input').value.trim();
+    
+    if (img || ans) {
+        addCard();
+    }
 }
 
 // ── Cards ──────────────────────────────────────────────────
@@ -127,6 +139,7 @@ function addCard() {
         updateCardNumbers();
         updateCounter();
         updateStartBtn();
+        ensureEmptyCardAtEnd();
         autoSave();
     });
 
@@ -178,6 +191,7 @@ function addCard() {
 
     answerIn.addEventListener('input', () => {
         refreshCardState(card);
+        ensureEmptyCardAtEnd();
         autoSave();
     });
 
@@ -201,6 +215,7 @@ function loadImage(file, card) {
         card.dataset.imageData = e.target.result;
         card.classList.add('has-image');
         refreshCardState(card);
+        ensureEmptyCardAtEnd();
         autoSave();
     };
     reader.readAsDataURL(file);
@@ -246,7 +261,6 @@ function handleBulkUpload(e) {
     if (!files.length) return;
 
     files.forEach((file) => {
-        // 이미지가 비어있는 카드를 찾거나 새로 추가
         let targetCard = null;
         $$('.question-card').forEach(card => {
             if (!targetCard && !card.dataset.imageData) {
@@ -294,6 +308,7 @@ function loadFromLocalStorage() {
             const data = JSON.parse(saved);
             if (Array.isArray(data) && data.length > 0) {
                 populateCards(data);
+                ensureEmptyCardAtEnd();
                 return;
             }
         }
@@ -302,14 +317,14 @@ function loadFromLocalStorage() {
     }
     // Fallback if empty or failed
     questionGrid.innerHTML = '';
-    addCard();
+    ensureEmptyCardAtEnd();
 }
 
 function clearAllData() {
     if (!confirm('현재 작성된 모든 문제와 이미지를 삭제하고 완전히 초기화하시겠습니까?')) return;
     localStorage.removeItem('pictureQuizCurrentSet');
     questionGrid.innerHTML = '';
-    addCard();
+    ensureEmptyCardAtEnd();
     updateStartBtn();
     updateCounter();
 }
