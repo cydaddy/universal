@@ -29,8 +29,12 @@
                 <input type="file" id="bulk-file-input" accept="image/*" multiple hidden>
             </div>
             <div class="set-io-wrap">
-                <button id="save-set-btn" class="btn-bulk btn-save">💾 세트 저장</button>
-                <button id="load-set-btn" class="btn-bulk btn-load">📥 세트 불러오기</button>
+                <button id="save-set-btn" class="btn-bulk btn-save" title="Downloads 폴더로 파일이 저장됩니다. 다운로드 후 sets 폴더로 이동시켜주세요.">💾 세트 다운로드</button>
+                <div class="set-load-group">
+                    <input type="text" id="set-filename" class="set-filename" placeholder="파일명 (예: q1.json)">
+                    <button id="load-set-btn" class="btn-bulk btn-load" title="sets 폴더에서 검색">📥 불러오기</button>
+                    <button id="manual-load-btn" class="btn-bulk btn-load" title="직접 파일 선택">📁</button>
+                </div>
                 <input type="file" id="load-set-input" accept=".json" hidden>
             </div>
             <div class="question-counter">

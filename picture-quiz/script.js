@@ -37,6 +37,14 @@ const readyScreen    = $('#ready-screen');
 const realStartBtn   = $('#real-start-btn');
 const cancelStartBtn = $('#cancel-start-btn');
 
+const saveSetBtn     = $('#save-set-btn');
+const loadSetBtn     = $('#load-set-btn');
+const manualLoadBtn  = $('#manual-load-btn');
+const setFilenameIn  = $('#set-filename');
+const loadSetInput   = $('#load-set-input');
+const pauseBtn       = $('#pause-btn');
+const stopBtn        = $('#stop-btn');
+
 // ── Initialise ─────────────────────────────────────────────
 function init() {
     // Add 1 initial card
@@ -56,8 +64,13 @@ function init() {
     });
 
     saveSetBtn.addEventListener('click', saveSet);
-    loadSetBtn.addEventListener('click', () => loadSetInput.click());
-    loadSetInput.addEventListener('change', loadSet);
+    loadSetBtn.addEventListener('click', loadSetFromFolder);
+    manualLoadBtn.addEventListener('click', () => loadSetInput.click());
+    loadSetInput.addEventListener('change', loadSetFromFile);
+    
+    setFilenameIn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') loadSetFromFolder();
+    });
 
     pauseBtn.addEventListener('click', togglePause);
     stopBtn.addEventListener('click', restart);
@@ -278,7 +291,25 @@ function saveSet() {
     URL.revokeObjectURL(url);
 }
 
-function loadSet(e) {
+function loadSetFromFolder() {
+    let filename = setFilenameIn.value.trim();
+    if (!filename) return;
+    if (!filename.endsWith('.json')) filename += '.json';
+
+    fetch(`./sets/${filename}`)
+        .then(res => {
+            if (!res.ok) throw new Error('File not found');
+            return res.json();
+        })
+        .then(data => {
+            populateCards(data);
+        })
+        .catch(err => {
+            alert(`세트 '${filename}'을 불러올 수 없습니다.\n파일이 없거나 브라우저 보안 정책으로 인해 차단되었습니다.\n\n해결 방법: 📁 버튼을 눌러 직접 파일을 선택해 주세요.`);
+        });
+}
+
+function loadSetFromFile(e) {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -286,27 +317,7 @@ function loadSet(e) {
     reader.onload = (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            if (!Array.isArray(data)) throw new Error();
-
-            // Clear existing
-            questionGrid.innerHTML = '';
-
-            data.forEach((item) => {
-                addCard();
-                const cards = $$('.question-card');
-                const card = cards[cards.length - 1];
-                
-                if (item.image) {
-                    const area = card.querySelector('.upload-area');
-                    area.innerHTML = `<img src="${item.image}" alt="질문 이미지">`;
-                    card.dataset.imageData = item.image;
-                    card.classList.add('has-image');
-                }
-                if (item.answer) {
-                    card.querySelector('.answer-input').value = item.answer;
-                }
-                refreshCardState(card);
-            });
+            populateCards(data);
         } catch (err) {
             alert('유효하지 않은 세트 파일이거나 오류가 발생했습니다.');
         }
@@ -314,6 +325,34 @@ function loadSet(e) {
     };
     reader.readAsText(file);
 }
+
+function populateCards(data) {
+    if (!Array.isArray(data)) {
+        alert('잘못된 데이터 형식입니다.');
+        return;
+    }
+
+    // Clear existing
+    questionGrid.innerHTML = '';
+
+    data.forEach((item) => {
+        addCard();
+        const cards = $$('.question-card');
+        const card = cards[cards.length - 1];
+        
+        if (item.image) {
+            const area = card.querySelector('.upload-area');
+            area.innerHTML = `<img src="${item.image}" alt="질문 이미지">`;
+            card.dataset.imageData = item.image;
+            card.classList.add('has-image');
+        }
+        if (item.answer) {
+            card.querySelector('.answer-input').value = item.answer;
+        }
+        refreshCardState(card);
+    });
+}
+
 
 // ── Start Quiz ─────────────────────────────────────────────
 function prepareQuiz() {
