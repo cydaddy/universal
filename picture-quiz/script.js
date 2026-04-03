@@ -10,6 +10,7 @@ const state = {
     timerRemaining: 0,
     timerInterval: null,
     audioCtx: null,
+    isPaused: false,
 };
 
 // ── DOM refs ───────────────────────────────────────────────
@@ -31,20 +32,21 @@ const quizProgress   = $('#quiz-progress');
 const quizImage      = $('#quiz-image');
 const bombContainer  = $('#bomb-container');
 const answerOverlay  = $('#answer-overlay');
-const answerText     = $('#answer-text');
-const nextBtn        = $('#next-btn');
-const explosionOverlay = $('#explosion-overlay');
-const restartBtn     = $('#restart-btn');
-const endTotal       = $('#end-total');
-
-const TOTAL_QUESTIONS = 21;
+const addCardBtn     = $('#add-card-btn');
+const readyScreen    = $('#ready-screen');
+const realStartBtn   = $('#real-start-btn');
+const cancelStartBtn = $('#cancel-start-btn');
 
 // ── Initialise ─────────────────────────────────────────────
 function init() {
-    totalCount.textContent = TOTAL_QUESTIONS;
-    createCards(TOTAL_QUESTIONS);
+    // Add 1 initial card
+    addCard();
 
-    startBtn.addEventListener('click', startQuiz);
+    addCardBtn.addEventListener('click', () => addCard());
+
+    startBtn.addEventListener('click', prepareQuiz);
+    realStartBtn.addEventListener('click', startQuiz);
+    cancelStartBtn.addEventListener('click', () => switchScreen(setupScreen));
     nextBtn.addEventListener('click', nextQuestion);
     restartBtn.addEventListener('click', restart);
     bulkBtn.addEventListener('click', () => bulkFileInput.click());
@@ -52,64 +54,76 @@ function init() {
     timerInput.addEventListener('input', () => {
         state.timerDuration = Math.max(1, parseInt(timerInput.value) || 5);
     });
+
+    saveSetBtn.addEventListener('click', saveSet);
+    loadSetBtn.addEventListener('click', () => loadSetInput.click());
+    loadSetInput.addEventListener('change', loadSet);
+
+    pauseBtn.addEventListener('click', togglePause);
+    stopBtn.addEventListener('click', restart);
 }
 
 // ── Cards ──────────────────────────────────────────────────
-function createCards(count) {
-    questionGrid.innerHTML = '';
-    for (let i = 0; i < count; i++) {
-        const card = document.createElement('div');
-        card.className = 'question-card';
-        card.dataset.index = i;
-        card.innerHTML = `
-            <div class="card-number">${i + 1}</div>
-            <button class="card-clear-btn" title="초기화">✕</button>
-            <div class="upload-area" data-index="${i}">
-                <div class="upload-placeholder">
-                    <span class="upload-icon">📷</span>
-                    <span>이미지 업로드</span>
-                </div>
+function addCard() {
+    const i = $$('.question-card').length;
+    const card = document.createElement('div');
+    card.className = 'question-card';
+    card.dataset.index = i;
+    card.innerHTML = `
+        <div class="card-number">${i + 1}</div>
+        <button class="card-clear-btn" title="삭제">✕</button>
+        <div class="upload-area" data-index="${i}">
+            <div class="upload-placeholder">
+                <span class="upload-icon">📷</span>
+                <span>이미지 업로드</span>
             </div>
-            <input type="text" class="answer-input" placeholder="정답 입력" data-index="${i}">
-            <input type="file" class="file-input" accept="image/*" data-index="${i}" hidden>
-        `;
+        </div>
+        <input type="text" class="answer-input" placeholder="정답 입력" data-index="${i}">
+        <input type="file" class="file-input" accept="image/*" data-index="${i}" hidden>
+    `;
 
-        const uploadArea = card.querySelector('.upload-area');
-        const fileInput  = card.querySelector('.file-input');
-        const answerIn   = card.querySelector('.answer-input');
-        const clearBtn   = card.querySelector('.card-clear-btn');
+    const uploadArea = card.querySelector('.upload-area');
+    const fileInput  = card.querySelector('.file-input');
+    const answerIn   = card.querySelector('.answer-input');
+    const clearBtn   = card.querySelector('.card-clear-btn');
 
-        // Click to upload
-        uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('click', () => fileInput.click());
 
-        // Drag-and-drop
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0], card);
-        });
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0], card);
+    });
 
-        // File input change
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files[0]) loadImage(e.target.files[0], card);
-        });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) loadImage(e.target.files[0], card);
+    });
 
-        // Answer input change
-        answerIn.addEventListener('input', () => refreshCardState(card));
+    answerIn.addEventListener('input', () => refreshCardState(card));
 
-        // Clear button
-        clearBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            clearCard(card);
-        });
+    clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // 삭제 기능으로 변경 (기존은 내용 비우기였으나 동적 추가이므로 요소 삭제)
+        card.remove();
+        updateCardNumbers();
+        updateCounter();
+        updateStartBtn();
+    });
 
-        questionGrid.appendChild(card);
-    }
+    questionGrid.appendChild(card);
+    updateStartBtn();
+}
+
+function updateCardNumbers() {
+    $$('.question-card').forEach((card, idx) => {
+        card.dataset.index = idx;
+        card.querySelector('.card-number').textContent = idx + 1;
+    });
 }
 
 function loadImage(file, card) {
@@ -147,38 +161,108 @@ function refreshCardState(card) {
     updateStartBtn();
 }
 
-function updateCounter() {
-    const count = $$('.question-card.complete').length;
-    registeredCount.textContent = count;
-}
-
 function updateStartBtn() {
     const count = $$('.question-card.complete').length;
     startBtn.disabled = count === 0;
 }
 
 // ── Bulk Upload ────────────────────────────────────────────
+
+function updateCounter() {
+    const count = $$('.question-card.complete').length;
+    registeredCount.textContent = count;
+}
+
 function handleBulkUpload(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    const cards = $$('.question-card');
-    let cardIdx = 0;
-
     files.forEach((file) => {
-        // Find next card without image
-        while (cardIdx < cards.length && cards[cardIdx].dataset.imageData) cardIdx++;
-        if (cardIdx >= cards.length) return;
-        loadImage(file, cards[cardIdx]);
-        cardIdx++;
+        // 이미지가 비어있는 카드를 찾거나 새로 추가
+        let targetCard = null;
+        $$('.question-card').forEach(card => {
+            if (!targetCard && !card.dataset.imageData) {
+                targetCard = card;
+            }
+        });
+        
+        if (!targetCard) {
+            addCard();
+            const all = $$('.question-card');
+            targetCard = all[all.length - 1];
+        }
+
+        loadImage(file, targetCard);
     });
 
     // Reset so same files can be re-selected
     bulkFileInput.value = '';
 }
 
+// ── Save & Load Set ────────────────────────────────────────
+function saveSet() {
+    const data = [];
+    $$('.question-card').forEach((card) => {
+        const img = card.dataset.imageData;
+        const ans = card.querySelector('.answer-input').value.trim();
+        if (img || ans) {
+            data.push({ image: img || '', answer: ans });
+        }
+    });
+
+    if (data.length === 0) {
+        alert('저장할 데이터가 없습니다.');
+        return;
+    }
+
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `picture_quiz_set_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function loadSet(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        try {
+            const data = JSON.parse(ev.target.result);
+            if (!Array.isArray(data)) throw new Error();
+
+            // Clear existing
+            questionGrid.innerHTML = '';
+
+            data.forEach((item) => {
+                addCard();
+                const cards = $$('.question-card');
+                const card = cards[cards.length - 1];
+                
+                if (item.image) {
+                    const area = card.querySelector('.upload-area');
+                    area.innerHTML = `<img src="${item.image}" alt="질문 이미지">`;
+                    card.dataset.imageData = item.image;
+                    card.classList.add('has-image');
+                }
+                if (item.answer) {
+                    card.querySelector('.answer-input').value = item.answer;
+                }
+                refreshCardState(card);
+            });
+        } catch (err) {
+            alert('유효하지 않은 세트 파일이거나 오류가 발생했습니다.');
+        }
+        loadSetInput.value = '';
+    };
+    reader.readAsText(file);
+}
+
 // ── Start Quiz ─────────────────────────────────────────────
-function startQuiz() {
+function prepareQuiz() {
     state.questions = [];
     $$('.question-card').forEach((card, i) => {
         const img = card.dataset.imageData;
@@ -189,13 +273,17 @@ function startQuiz() {
     });
 
     if (state.questions.length === 0) {
-        alert('최소 1개 이상의 문제를 등록해주세요!\n(이미지 + 정답 모두 필요)');
+        alert('최소 1개 이상의 문제를 완성해주세요!\n(이미지 + 정답 모두 필요)');
         return;
     }
 
     state.timerDuration = Math.max(1, parseInt(timerInput.value) || 5);
     state.currentIndex = 0;
 
+    switchScreen(readyScreen);
+}
+
+function startQuiz() {
     switchScreen(quizScreen);
     showQuestion();
 }
@@ -218,6 +306,11 @@ function showQuestion() {
     container.style.animation = 'none';
     void container.offsetHeight;
     container.style.animation = '';
+
+    // Reset pause
+    state.isPaused = false;
+    pauseBtn.textContent = '⏸ 일시정지';
+    pauseBtn.classList.remove('paused');
 
     startBombTimer();
 }
@@ -253,6 +346,8 @@ function startBombTimer() {
     playTick(1);
 
     state.timerInterval = setInterval(() => {
+        if (state.isPaused) return;
+
         state.timerRemaining--;
 
         const frac = state.timerRemaining / state.timerDuration;
@@ -278,6 +373,19 @@ function startBombTimer() {
             explode();
         }
     }, 1000);
+}
+
+function togglePause() {
+    if (state.timerRemaining <= 0) return; // Cannot pause after explosion
+    state.isPaused = !state.isPaused;
+    
+    if (state.isPaused) {
+        pauseBtn.textContent = '▶ 계속하기';
+        pauseBtn.classList.add('paused');
+    } else {
+        pauseBtn.textContent = '⏸ 일시정지';
+        pauseBtn.classList.remove('paused');
+    }
 }
 
 function timerColor(frac) {
