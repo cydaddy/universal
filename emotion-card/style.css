@@ -1,0 +1,507 @@
+/* ===========================
+   감정카드 — style.css
+   =========================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /*
+   * 카드 크기 — 뷰포트에 비례, 크롬북(1366×768) 기준
+   * 세로: 뷰포트 높이의 84% 또는 최대 660px (스크롤 없이 딱 맞게)
+   * 가로: 2:3 비율 유지
+   */
+  --card-h: min(84svh, 84vh, 660px);
+  --card-w: calc(var(--card-h) * 0.667);
+  --card-radius: clamp(20px, 2.5vw, 32px);
+
+  --clr-bg: #0a0a14;
+  --clr-back-bg: rgba(15, 10, 35, 0.85);
+  --clr-back-border: rgba(180, 140, 255, 0.35);
+  --clr-label: #e8d8ff;
+  --clr-hint: rgba(200, 170, 255, 0.45);
+  --clr-front-bg: rgba(18, 10, 42, 0.95);
+  --clr-emotion: #f0e8ff;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--clr-bg);
+  font-family: 'Gowun Dodum', serif;
+}
+
+/* ─── 배경 캔버스 ─── */
+#bg-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+/* ─── 파티클 레이어 ─── */
+#particle-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  animation: float-particle var(--dur, 8s) var(--delay, 0s) ease-in-out infinite;
+}
+
+@keyframes float-particle {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  15%  { opacity: var(--max-opacity, 0.6); }
+  85%  { opacity: var(--max-opacity, 0.6); }
+  100% { transform: translateY(-110vh) scale(0.3); opacity: 0; }
+}
+
+/* ─── 씬 (카드 중앙 정렬) ─── */
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── 카드 래퍼 ─── (JS로 perspectve 뒤집기 직접 제어) ─── */
+.card {
+  width: var(--card-w);
+  height: var(--card-h);
+  position: relative;
+  cursor: pointer;
+  border-radius: var(--card-radius);
+  filter: drop-shadow(0 8px 40px rgba(140, 80, 255, 0.35));
+  /* perspective 없이 단순 scaleX 방식으로 뒤집기 */
+  transition: filter 0.4s ease;
+}
+
+.card:focus-visible {
+  outline: 3px solid rgba(180, 140, 255, 0.8);
+  outline-offset: 6px;
+}
+
+.card.is-flipped {
+  filter: drop-shadow(0 8px 50px rgba(180, 120, 255, 0.6));
+}
+
+/* ─── 카드 양면 공통 ─── */
+.card__face {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  /* JS가 직접 opacity + pointer-events + transform 으로 전환 */
+  transition:
+    opacity 0.15s ease,
+    transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ─── 뒷면 (기본 보이는 면) ─── */
+.card__face--back {
+  background: var(--clr-back-bg);
+  border: 1px solid var(--clr-back-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* 보이는 상태 */
+  opacity: 1;
+  transform: scaleX(1);
+  pointer-events: auto;
+  z-index: 2;
+}
+
+/* 카드가 뒤집혔을 때 뒷면: 축소 후 숨김 */
+.card.is-flipped .card__face--back {
+  opacity: 0;
+  transform: scaleX(0);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── 앞면 (기본 숨겨진 면) ─── */
+.card__face--front {
+  background: var(--clr-front-bg);
+  border: 1px solid rgba(200, 160, 255, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  /* 숨겨진 상태 */
+  opacity: 0;
+  transform: scaleX(0);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 카드가 뒤집혔을 때 앞면: 펼쳐짐 */
+.card.is-flipped .card__face--front {
+  opacity: 1;
+  transform: scaleX(1);
+  pointer-events: auto;
+  z-index: 2;
+  /* 약간 딜레이로 뒷면이 닫힌 뒤 열리는 느낌 */
+  transition:
+    opacity 0.15s 0.2s ease,
+    transform 0.36s 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── 카드 뒷면 내부 ─── */
+.card-back-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 은은한 빛 링 */
+.shimmer-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(180, 130, 255, 0.18);
+  width: 200px;
+  height: 200px;
+  animation: pulse-ring 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.shimmer-ring--2 {
+  width: 280px;
+  height: 280px;
+  border-color: rgba(120, 80, 220, 0.10);
+  animation-duration: 6s;
+  animation-delay: -2s;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { transform: scale(1);    opacity: 0.5; }
+  50%       { transform: scale(1.08); opacity: 1; }
+}
+
+/* 카드 뒷면 텍스트 */
+.card-back-label {
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 800;
+  font-size: clamp(2.6rem, 6vh, 4rem);
+  line-height: 1.35;
+  text-align: center;
+  color: var(--clr-label);
+  letter-spacing: 0.05em;
+  animation: shimmer-text 3s ease-in-out infinite;
+  text-shadow: 0 0 20px rgba(200,160,255,0.6), 0 0 60px rgba(160,100,255,0.3);
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes shimmer-text {
+  0%, 100% { opacity: 0.75; text-shadow: 0 0 18px rgba(200,160,255,0.5), 0 0 50px rgba(160,100,255,0.25); }
+  50%       { opacity: 1;    text-shadow: 0 0 32px rgba(220,180,255,0.95), 0 0 80px rgba(180,120,255,0.55); }
+}
+
+/* 탭 힌트 */
+.tap-hint {
+  position: absolute;
+  bottom: 36px;
+  font-size: 0.78rem;
+  letter-spacing: 0.15em;
+  color: var(--clr-hint);
+  animation: blink-hint 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes blink-hint {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.9; }
+}
+
+/* 반짝이 컨테이너 */
+.sparkle-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sparkle {
+  position: absolute;
+  border-radius: 50%;
+  background: white;
+  animation: sparkle-anim var(--s-dur, 2s) var(--s-delay, 0s) ease-in-out infinite;
+  opacity: 0;
+}
+
+@keyframes sparkle-anim {
+  0%   { opacity: 0;   transform: scale(0) rotate(0deg); }
+  40%  { opacity: 1;   transform: scale(1.5) rotate(120deg); }
+  70%  { opacity: 0.6; }
+  100% { opacity: 0;   transform: scale(0) rotate(360deg); }
+}
+
+/* ─── 카드 앞면 내부 ─── */
+.card-front-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 30px;
+}
+
+/* 이모지 */
+.emotion-emoji {
+  font-size: clamp(5.5rem, 14vh, 9rem);
+  line-height: 1;
+  user-select: none;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 20px rgba(180, 120, 255, 0.7));
+}
+
+@keyframes pop-in {
+  from { transform: scale(0) rotate(-15deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0deg);   opacity: 1; }
+}
+
+/* 감정 단어 */
+.emotion-word {
+  font-family: 'Nanum Myeongjo', serif;
+  font-weight: 700;
+  font-size: clamp(2.4rem, 5.5vh, 3.6rem);
+  color: var(--clr-emotion);
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 0 30px rgba(220, 170, 255, 0.85),
+    0 0 60px rgba(160, 100, 255, 0.4),
+    0 2px 8px rgba(0,0,0,0.5);
+  line-height: 1.3;
+  user-select: none;
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 다시 뽑기 버튼 */
+.retry-btn {
+  margin-top: 14px;
+  padding: clamp(10px, 1.4vh, 14px) clamp(24px, 3vw, 36px);
+  border: 1px solid rgba(180, 130, 255, 0.45);
+  border-radius: 50px;
+  background: rgba(140, 80, 255, 0.12);
+  color: rgba(210, 180, 255, 0.85);
+  font-family: 'Gowun Dodum', serif;
+  font-size: clamp(0.9rem, 1.6vh, 1.1rem);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: background 0.25s, border-color 0.25s, transform 0.15s, box-shadow 0.25s;
+  position: relative;
+  z-index: 2;
+}
+
+.retry-btn:hover {
+  background: rgba(160, 100, 255, 0.28);
+  border-color: rgba(200, 160, 255, 0.7);
+  box-shadow: 0 0 16px rgba(160, 100, 255, 0.35);
+  transform: scale(1.05);
+}
+
+.retry-btn:active {
+  transform: scale(0.97);
+}
+
+/* ═══════════════════════════════════════
+   앞면 장식 요소
+   ═══════════════════════════════════════ */
+
+/* 배경 발광 오브 */
+.front-orb {
+  position: absolute;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(120, 60, 220, 0.22) 0%,
+    rgba(80, 30, 160, 0.12) 50%,
+    transparent 75%
+  );
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  animation: orb-pulse 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes orb-pulse {
+  0%, 100% { transform: translate(-50%, -55%) scale(1);    opacity: 0.7; }
+  50%       { transform: translate(-50%, -55%) scale(1.12); opacity: 1; }
+}
+
+/* 앞면 shimmer 링 */
+.front-ring {
+  position: absolute;
+  border-radius: 50%;
+  width: 55%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(160, 110, 255, 0.2);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -58%);
+  animation: front-ring-pulse 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.front-ring--2 {
+  width: 75%;
+  border-color: rgba(120, 80, 220, 0.10);
+  animation-duration: 7s;
+  animation-delay: -3s;
+}
+
+@keyframes front-ring-pulse {
+  0%, 100% { transform: translate(-50%, -58%) scale(1);    opacity: 0.5; }
+  50%       { transform: translate(-50%, -58%) scale(1.06); opacity: 1; }
+}
+
+/* 앞면 반짝이 */
+.front-sparkle-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 코너 장식 */
+.corner {
+  position: absolute;
+  width: clamp(28px, 4vw, 42px);
+  height: clamp(28px, 4vw, 42px);
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.55;
+}
+
+.corner::before,
+.corner::after {
+  content: '';
+  position: absolute;
+  background: linear-gradient(135deg, rgba(180, 130, 255, 0.8), rgba(120, 80, 220, 0.3));
+  border-radius: 2px;
+}
+
+.corner::before { width: 100%; height: 1.5px; }
+.corner::after  { width: 1.5px; height: 100%; }
+
+.corner--tl { top: 20px; left: 20px; }
+.corner--tl::before { top: 0; left: 0; }
+.corner--tl::after  { top: 0; left: 0; }
+
+.corner--tr { top: 20px; right: 20px; transform: scaleX(-1); }
+.corner--bl { bottom: 20px; left: 20px;  transform: scaleY(-1); }
+.corner--br { bottom: 20px; right: 20px; transform: scale(-1); }
+
+/* 이모지 헤일로 */
+.emoji-halo {
+  position: absolute;
+  width: clamp(120px, 22vh, 180px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(160, 100, 255, 0.25) 0%,
+    rgba(100, 60, 200, 0.10) 55%,
+    transparent 75%
+  );
+  animation: halo-glow 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes halo-glow {
+  0%, 100% { transform: scale(1);    opacity: 0.7; }
+  50%       { transform: scale(1.18); opacity: 1; }
+}
+
+/* 장식 구분선 */
+.front-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 60%;
+  position: relative;
+  z-index: 2;
+  margin: clamp(8px, 1.5vh, 14px) 0;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(180, 130, 255, 0.5),
+    transparent
+  );
+}
+
+.divider-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(180, 130, 255, 0.6);
+  box-shadow: 0 0 6px rgba(160, 100, 255, 0.8);
+  animation: dot-pulse 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.divider-dot:last-child {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.4); }
+}
+
+/* 애니메이션 재실행 헬퍼 */
+.anim-pop {
+  animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+}
+
+.anim-fade {
+  animation: fade-up 0.5s 0.15s ease both !important;
+}
+
+.anim-retry {
+  animation: fade-up 0.5s 0.3s ease both !important;
+}
+
+/* ─── 모바일 (세로) 대응 ─── */
+@media (max-width: 480px) {
+  :root {
+    --card-h: min(78svh, 78vh, 520px);
+  }
+}

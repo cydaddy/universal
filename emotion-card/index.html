@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>누군가의 마음 — 감정카드</title>
+  <meta name="description" content="카드를 뒤집어 감춰진 감정을 발견하세요." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 동적 배경 캔버스 -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- 파티클 레이어 -->
+  <div id="particle-layer" aria-hidden="true"></div>
+
+  <!-- 메인 카드 영역 -->
+  <main class="scene" id="scene" aria-label="감정 카드">
+    <div class="card" id="card" role="button" tabindex="0" aria-label="카드를 클릭해 감정을 확인하세요">
+      <!-- 카드 뒷면 (처음 보이는 면) -->
+      <div class="card__face card__face--back" aria-hidden="false">
+        <div class="card-back-inner">
+          <div class="shimmer-ring" aria-hidden="true"></div>
+          <div class="shimmer-ring shimmer-ring--2" aria-hidden="true"></div>
+          <div class="card-back-label" id="back-label">누군가의<br />마음</div>
+          <div class="sparkle-container" id="sparkle-container" aria-hidden="true"></div>
+          <div class="tap-hint" id="tap-hint">눌러보세요</div>
+        </div>
+      </div>
+
+      <!-- 카드 앞면 (뒤집었을 때 보이는 면) -->
+      <div class="card__face card__face--front" aria-live="polite">
+        <!-- 배경 장식 -->
+        <div class="front-orb" aria-hidden="true"></div>
+        <div class="front-ring"  aria-hidden="true"></div>
+        <div class="front-ring front-ring--2" aria-hidden="true"></div>
+        <div class="front-sparkle-container" id="front-sparkle-container" aria-hidden="true"></div>
+
+        <!-- 코너 장식 -->
+        <div class="corner corner--tl" aria-hidden="true"></div>
+        <div class="corner corner--tr" aria-hidden="true"></div>
+        <div class="corner corner--bl" aria-hidden="true"></div>
+        <div class="corner corner--br" aria-hidden="true"></div>
+
+        <!-- 콘텐츠 -->
+        <div class="card-front-inner" id="card-front-inner">
+          <div class="emoji-halo" aria-hidden="true"></div>
+          <div class="emotion-emoji" id="emotion-emoji" aria-hidden="true"></div>
+          <div class="front-divider" aria-hidden="true">
+            <span class="divider-dot"></span>
+            <span class="divider-line"></span>
+            <span class="divider-dot"></span>
+          </div>
+          <div class="emotion-word" id="emotion-word"></div>
+          <button class="retry-btn" id="retry-btn" aria-label="다시 뽑기">↺ 다시</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
