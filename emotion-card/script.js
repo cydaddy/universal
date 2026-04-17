@@ -83,6 +83,104 @@ const particleLayer = document.getElementById('particle-layer');
 let isFlipped = false;
 
 // ────────────────────────────────────────────────
+// Web Audio 엔진 (외부 파일 없이 합성)
+// ────────────────────────────────────────────────
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // 브라우저 정사진 정송 대응
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+/**
+ * 카드 뒤집기 사운드
+ * 1단계: 마로 흥황소리 (화이트 노이즈 + bandpass)
+ * 2단계: 상승 스파클 체임 톤 3개
+ */
+function playSoundFlip() {
+  const ac = getAudioCtx();
+  const now = ac.currentTime;
+
+  // ── 1. Whoosh (filtered noise) ──
+  const bufLen = ac.sampleRate * 0.35;
+  const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = ac.createBufferSource();
+  noise.buffer = buf;
+
+  const bpf = ac.createBiquadFilter();
+  bpf.type = 'bandpass';
+  bpf.frequency.setValueAtTime(600, now);
+  bpf.frequency.linearRampToValueAtTime(2400, now + 0.25);
+  bpf.Q.value = 0.8;
+
+  const noiseGain = ac.createGain();
+  noiseGain.gain.setValueAtTime(0, now);
+  noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.04);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+  noise.connect(bpf);
+  bpf.connect(noiseGain);
+  noiseGain.connect(ac.destination);
+  noise.start(now);
+  noise.stop(now + 0.36);
+
+  // ── 2. Sparkle chimes (3개 상승) ──
+  const chimeFreqs = [880, 1108, 1480];
+  chimeFreqs.forEach((freq, i) => {
+    const osc  = ac.createOscillator();
+    const gain = ac.createGain();
+    const t    = now + 0.18 + i * 0.07;
+
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.12, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(t);
+    osc.stop(t + 0.4);
+  });
+}
+
+/**
+ * 되돌리기 사운드
+ * 부드럽게 내려가는 두 개의 싸인음
+ */
+function playSoundReset() {
+  const ac  = getAudioCtx();
+  const now = ac.currentTime;
+  const resetFreqs = [660, 440];
+
+  resetFreqs.forEach((freq, i) => {
+    const osc  = ac.createOscillator();
+    const gain = ac.createGain();
+    const t    = now + i * 0.08;
+
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.09, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  });
+}
+
+// ────────────────────────────────────────────────
 // 랜덤 감정 뽑기
 // ────────────────────────────────────────────────
 function pickEmotion() {
@@ -112,9 +210,10 @@ function setEmotion(emotion) {
 // 카드 뒤집기
 // ────────────────────────────────────────────────
 function flipCard() {
-  if (isFlipped) return; // 뒤집는 도중 중복 클릭 방지
+  if (isFlipped) return;
 
   isFlipped = true;
+  playSoundFlip();
   const emotion = pickEmotion();
   setEmotion(emotion);
 
@@ -127,9 +226,9 @@ function flipCard() {
 // ────────────────────────────────────────────────
 function resetCard(e) {
   e.stopPropagation();
+  playSoundReset();
   card.classList.remove('is-flipped');
 
-  // 플립 애니메이션이 끝난 뒤 상태 초기화
   setTimeout(() => {
     isFlipped = false;
   }, 750);
