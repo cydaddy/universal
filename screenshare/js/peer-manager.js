@@ -41,6 +41,7 @@ class PeerManager {
 
   /**
    * 선생님으로 방 생성
+   * 이전 세션이 PeerJS 서버에 남아있을 경우 자동으로 재시도
    */
   async createRoom(name) {
     this.role = 'teacher';
@@ -48,9 +49,33 @@ class PeerManager {
     this.roomCode = this._getClassroomKey();
 
     const peerId = `ps-${this.roomCode}-t`;
-    await this._initPeer(peerId);
-    this._setupTeacherListeners();
+    const maxRetries = 10;
 
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this._initPeer(peerId);
+        break; // 성공
+      } catch (err) {
+        // 이전 세션 ID가 아직 서버에 남아있는 경우 → 자동 재시도
+        if (err.type === 'unavailable-id' && attempt < maxRetries - 1) {
+          console.log(`[PeerManager] 이전 세션 정리 대기 중... (${attempt + 1}/${maxRetries})`);
+          this._notifyStatus('connecting');
+          if (this.onError) {
+            this.onError('이전 세션 정리 중... 잠시만 기다려 주세요.');
+          }
+          // 깨진 Peer 인스턴스 정리
+          if (this.peer) {
+            try { this.peer.destroy(); } catch {}
+            this.peer = null;
+          }
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+        throw err; // 다른 에러이거나 재시도 소진
+      }
+    }
+
+    this._setupTeacherListeners();
     return this.roomCode;
   }
 
@@ -96,8 +121,7 @@ class PeerManager {
         console.error('[PeerManager] Error:', err.type, err.message);
 
         if (err.type === 'unavailable-id') {
-          // Teacher ID already taken
-          this._notifyError('이미 수업이 생성되어 있거나 다른 교사가 동일한 네트워크에서 수업 중입니다.');
+          // Teacher ID already taken — createRoom에서 재시도 처리하므로 여기서는 reject만 함
           reject(err);
           return;
         }
