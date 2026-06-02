@@ -18,6 +18,10 @@ class PeerManager {
     this.teacherMediaConn = null;
     this.localStream = null;
 
+    // Teacher generation (세대 번호)
+    this._teacherGen = 0;
+    this._lastKnownTeacherGen = 0;
+
     // Callbacks
     this.onStudentJoined = null;        // (peerId, name) => {}
     this.onStudentLeft = null;          // (peerId) => {}
@@ -28,10 +32,14 @@ class PeerManager {
     this.onError = null;                // (error) => {}
     this.onTeacherReconnected = null;   // () => {} - 교사가 재접속할 때 학생에게 알림
 
+    // Heartbeat
+    this._heartbeatInterval = null;
+    this._heartbeatTimeout = null;
+
     // Reconnection
     this._reconnectTimer = null;
     this._reconnectAttempts = 0;
-    this._maxReconnectAttempts = 10;
+    this._maxReconnectAttempts = 999;
     this._destroyed = false;
   }
 
@@ -41,42 +49,38 @@ class PeerManager {
 
   /**
    * 선생님으로 방 생성
-   * 이전 세션이 PeerJS 서버에 남아있을 경우 자동으로 재시도
+   * 매번 새로운 세대 번호(generation)를 사용하여 unavailable-id 문제 회피
    */
   async createRoom(name) {
     this.role = 'teacher';
     this.myName = name;
     this.roomCode = this._getClassroomKey();
-    this._maxReconnectAttempts = 999; // 교사 시그널링 서버 연결 무제한 재시도
 
-    const peerId = `ps-${this.roomCode}-t`;
-    const maxRetries = 10;
+    // 세대 번호 증가 → 이전 좀비 세션과 ID 충돌 방지
+    this._teacherGen = (parseInt(localStorage.getItem('ps-teacher-gen') || '0')) + 1;
+    localStorage.setItem('ps-teacher-gen', String(this._teacherGen));
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        await this._initPeer(peerId);
-        break; // 성공
-      } catch (err) {
-        // 이전 세션 ID가 아직 서버에 남아있는 경우 → 자동 재시도
-        if (err.type === 'unavailable-id' && attempt < maxRetries - 1) {
-          console.log(`[PeerManager] 이전 세션 정리 대기 중... (${attempt + 1}/${maxRetries})`);
-          this._notifyStatus('connecting');
-          if (this.onError) {
-            this.onError('이전 세션 정리 중... 잠시만 기다려 주세요.');
-          }
-          // 깨진 Peer 인스턴스 정리
-          if (this.peer) {
-            try { this.peer.destroy(); } catch {}
-            this.peer = null;
-          }
-          await new Promise(r => setTimeout(r, 3000));
-          continue;
-        }
-        throw err; // 다른 에러이거나 재시도 소진
+    const peerId = `ps-${this.roomCode}-t-${this._teacherGen}`;
+    console.log(`[PeerManager] Creating room with teacher ID: ${peerId} (gen ${this._teacherGen})`);
+
+    try {
+      await this._initPeer(peerId);
+    } catch (err) {
+      // 혹시나 같은 gen 번호가 충돌할 경우 한 번 더 증가해서 재시도
+      if (err.type === 'unavailable-id') {
+        console.warn('[PeerManager] ID collision on gen', this._teacherGen, ', incrementing...');
+        if (this.peer) { try { this.peer.destroy(); } catch {} this.peer = null; }
+        this._teacherGen++;
+        localStorage.setItem('ps-teacher-gen', String(this._teacherGen));
+        const retryId = `ps-${this.roomCode}-t-${this._teacherGen}`;
+        await this._initPeer(retryId);
+      } else {
+        throw err;
       }
     }
 
     this._setupTeacherListeners();
+    this._startTeacherHeartbeat();
     return this.roomCode;
   }
 
@@ -87,11 +91,10 @@ class PeerManager {
     this.role = 'student';
     this.myName = name;
     this.roomCode = this._getClassroomKey();
-    this._maxReconnectAttempts = 999; // 학생도 무제한 재연결 시도
 
     const peerId = `ps-${this.roomCode}-s-${this._randomId()}`;
     await this._initPeer(peerId);
-    this._connectToTeacher();
+    await this._findAndConnectToTeacher();
   }
 
   /**
@@ -123,30 +126,14 @@ class PeerManager {
         console.error('[PeerManager] Error:', err.type, err.message);
 
         if (err.type === 'unavailable-id') {
-          // Teacher ID already taken — createRoom에서 재시도 처리하므로 여기서는 reject만 함
           reject(err);
           return;
         }
 
         if (err.type === 'peer-unavailable') {
-          if (this.role === 'student') {
-            console.warn('[PeerManager] Teacher is offline. Scheduling reconnect...');
-            this._notifyStatus('disconnected');
-            
-            // Clean up any failed/half-open connections
-            if (this.teacherDataConn) {
-              try { this.teacherDataConn.close(); } catch {}
-              this.teacherDataConn = null;
-            }
-            if (this.teacherMediaConn) {
-              try { this.teacherMediaConn.close(); } catch {}
-              this.teacherMediaConn = null;
-            }
-            
-            this._scheduleTeacherReconnect();
-          } else {
-            this._notifyError('대상 피어를 찾을 수 없습니다.');
-          }
+          // 학생: 교사를 찾을 수 없음 → 재연결 스캔으로 처리됨
+          // 에러만 로깅하고, _findAndConnectToTeacher에서 재시도
+          console.warn('[PeerManager] peer-unavailable — teacher might be offline');
           return;
         }
 
@@ -172,6 +159,67 @@ class PeerManager {
         this._notifyStatus('disconnected');
       });
     });
+  }
+
+  /* ------------------------------------------
+     HEARTBEAT (교사 → 학생 주기적 ping)
+     ------------------------------------------ */
+
+  /**
+   * 교사: 3초마다 모든 학생에게 ping 전송
+   */
+  _startTeacherHeartbeat() {
+    this._stopHeartbeat();
+    this._heartbeatInterval = setInterval(() => {
+      this.broadcastCommand({ type: 'ping', data: { gen: this._teacherGen } });
+    }, 3000);
+  }
+
+  /**
+   * 학생: 하트비트 타이머 시작 (10초 내 ping 미수신 시 재연결)
+   */
+  _startStudentHeartbeatChecker() {
+    this._stopHeartbeat();
+    this._resetHeartbeatTimeout();
+  }
+
+  /**
+   * 학생: 하트비트 타임아웃 리셋
+   */
+  _resetHeartbeatTimeout() {
+    if (this._heartbeatTimeout) clearTimeout(this._heartbeatTimeout);
+    this._heartbeatTimeout = setTimeout(() => {
+      if (this._destroyed) return;
+      console.warn('[Student] Teacher heartbeat lost! Starting reconnection...');
+
+      // 교사가 떠난 것으로 판단 → 즉시 재연결 루프 진입
+      this._stopHeartbeat();
+      if (this.teacherDataConn) {
+        try { this.teacherDataConn.close(); } catch {}
+        this.teacherDataConn = null;
+      }
+      if (this.teacherMediaConn) {
+        try { this.teacherMediaConn.close(); } catch {}
+        this.teacherMediaConn = null;
+      }
+      this._notifyStatus('disconnected');
+      this._reconnectAttempts = 0;
+      this._scheduleTeacherReconnect();
+    }, 12000); // 12초 (ping 3초 × 4회 놓치면)
+  }
+
+  /**
+   * 하트비트 중지
+   */
+  _stopHeartbeat() {
+    if (this._heartbeatInterval) {
+      clearInterval(this._heartbeatInterval);
+      this._heartbeatInterval = null;
+    }
+    if (this._heartbeatTimeout) {
+      clearTimeout(this._heartbeatTimeout);
+      this._heartbeatTimeout = null;
+    }
   }
 
   /* ------------------------------------------
@@ -341,25 +389,66 @@ class PeerManager {
      STUDENT LOGIC
      ------------------------------------------ */
 
-  _connectToTeacher() {
+  /**
+   * 학생: 교사의 세대 번호를 스캔하여 자동 연결
+   * 최신 gen부터 역순으로 시도 → 빠르게 교사 발견
+   */
+  async _findAndConnectToTeacher() {
+    // localStorage에서 교사의 최신 세대 번호 읽기
+    const storedGen = parseInt(localStorage.getItem('ps-teacher-gen') || '1');
+    this._lastKnownTeacherGen = storedGen;
+
+    console.log(`[Student] Scanning for teacher from gen ${storedGen}...`);
+    this._connectToTeacherByGen(storedGen);
+  }
+
+  /**
+   * 특정 세대 번호의 교사에게 연결 시도
+   */
+  _connectToTeacherByGen(gen) {
+    if (this._destroyed) return;
+
+    // 기존 데이터 연결 정리
+    if (this.teacherDataConn) {
+      try { this.teacherDataConn.close(); } catch {}
+      this.teacherDataConn = null;
+    }
+
     this._notifyStatus('connecting');
-    const teacherPeerId = `ps-${this.roomCode}-t`;
+    const teacherPeerId = `ps-${this.roomCode}-t-${gen}`;
+    console.log(`[Student] Trying to connect to teacher: ${teacherPeerId}`);
 
     // Data connection
     this.teacherDataConn = this.peer.connect(teacherPeerId, {
       reliable: true
     });
 
+    // 연결 시도 타임아웃: 5초 내에 open이 안 되면 다음 gen으로
+    const connectTimeout = setTimeout(() => {
+      console.log(`[Student] Connection to gen ${gen} timed out, trying next...`);
+      if (this.teacherDataConn) {
+        try { this.teacherDataConn.close(); } catch {}
+        this.teacherDataConn = null;
+      }
+      // 다음 세대 번호도 시도 (교사가 한 번 더 새로고침했을 수 있음)
+      this._tryNextGen(gen);
+    }, 5000);
+
     this.teacherDataConn.on('open', () => {
-      console.log('[Student] Connected to teacher');
+      clearTimeout(connectTimeout);
+      console.log(`[Student] Connected to teacher at gen ${gen}!`);
+      this._lastKnownTeacherGen = gen;
       this._notifyStatus('connected');
-      this._reconnectAttempts = 0; // 재연결 성공 시 카운터 초기화
+      this._reconnectAttempts = 0;
 
       // Send join message
       this.teacherDataConn.send(JSON.stringify({
         type: 'join',
         data: { name: this.myName }
       }));
+
+      // 하트비트 체커 시작
+      this._startStudentHeartbeatChecker();
 
       // 이전 접속 여부 확인 → 교사 재접속 후 재연결된 경우 콜백
       if (this._wasConnected) {
@@ -379,6 +468,16 @@ class PeerManager {
         return;
       }
 
+      // 하트비트 처리
+      if (msg.type === 'ping') {
+        this._resetHeartbeatTimeout();
+        // ping에 새 gen 정보가 오면 업데이트
+        if (msg.data && msg.data.gen) {
+          this._lastKnownTeacherGen = msg.data.gen;
+        }
+        return; // onCommandReceived로 전달 안 함
+      }
+
       console.log('[Student] Received command:', msg.type);
 
       if (this.onCommandReceived) {
@@ -391,7 +490,9 @@ class PeerManager {
     });
 
     this.teacherDataConn.on('close', () => {
+      clearTimeout(connectTimeout);
       console.log('[Student] Disconnected from teacher, will retry...');
+      this._stopHeartbeat();
       this._notifyStatus('disconnected');
 
       if (this.teacherMediaConn) {
@@ -400,37 +501,72 @@ class PeerManager {
       }
 
       if (!this._destroyed) {
-        // 교사 재접속을 기다리며 지속 재시도 (포기하지 않음)
-        this._reconnectAttempts = 0; // 포기하지 않도록 카운터 초기화
-        this._maxReconnectAttempts = 999; // 사실상 무한 재시도
+        this._reconnectAttempts = 0;
         this._scheduleTeacherReconnect();
       }
     });
 
     this.teacherDataConn.on('error', (err) => {
+      clearTimeout(connectTimeout);
       console.error('[Student] Data connection error:', err);
     });
   }
 
   /**
-   * 교사 재연결 대기 루프 (1초, 2초, 4초... 최대 8초 간격)
+   * 현재 gen 실패 시 다음 gen 시도
+   */
+  _tryNextGen(failedGen) {
+    if (this._destroyed) return;
+
+    // gen+1과 gen-1 양방향으로 시도
+    const nextGen = failedGen + 1;
+    const prevGen = Math.max(1, failedGen - 1);
+
+    // 일단 짧은 딜레이 후 다시 시도
+    this._reconnectAttempts++;
+    const delay = Math.min(2000 * Math.pow(1.5, Math.min(this._reconnectAttempts, 4)), 8000);
+
+    console.log(`[Student] Will retry teacher connection in ${Math.round(delay)}ms (attempt ${this._reconnectAttempts})`);
+
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      if (this._destroyed) return;
+
+      if (!this.peer || this.peer.destroyed || this.peer.disconnected) {
+        this._reinitialize();
+        return;
+      }
+
+      // 최신 localStorage gen 확인 (같은 머신이면 교사가 기록한 것을 읽을 수 있음)
+      const latestGen = parseInt(localStorage.getItem('ps-teacher-gen') || String(failedGen));
+      // 마지막으로 알려진 gen 또는 localStorage의 최신 gen 중 큰 것을 사용
+      const tryGen = Math.max(latestGen, this._lastKnownTeacherGen, nextGen);
+
+      this._connectToTeacherByGen(tryGen);
+    }, delay);
+  }
+
+  /**
+   * 교사 재연결 대기 루프
    */
   _scheduleTeacherReconnect() {
     if (this._destroyed || this._reconnectTimer) return;
 
-    const delay = Math.min(1000 * Math.pow(2, Math.min(this._reconnectAttempts, 3)), 8000);
+    const delay = Math.min(2000 * Math.pow(1.5, Math.min(this._reconnectAttempts, 4)), 8000);
     this._reconnectAttempts++;
-    console.log(`[Student] Waiting ${delay}ms before retrying teacher connection...`);
+    console.log(`[Student] Waiting ${Math.round(delay)}ms before retrying teacher connection... (attempt ${this._reconnectAttempts})`);
 
     this._reconnectTimer = setTimeout(() => {
       this._reconnectTimer = null;
       if (this._destroyed) return;
 
       if (this.peer && !this.peer.destroyed && !this.peer.disconnected) {
-        // Peer 자체는 살아있고 시그널링 서버에도 연결되어 있으면 바로 재연결 시도
-        this._connectToTeacher();
+        // 최신 gen 확인
+        const latestGen = parseInt(localStorage.getItem('ps-teacher-gen') || String(this._lastKnownTeacherGen));
+        const tryGen = Math.max(latestGen, this._lastKnownTeacherGen);
+        this._connectToTeacherByGen(tryGen);
       } else {
-        // Peer가 죽었거나 시그널링 서버와 끊겼으면 전체 재초기화
         this._reinitialize();
       }
     }, delay);
@@ -491,7 +627,9 @@ class PeerManager {
         }
       }
 
-      const teacherPeerId = `ps-${this.roomCode}-t`;
+      // 최신 교사 gen으로 연결
+      const teacherGen = this._lastKnownTeacherGen || parseInt(localStorage.getItem('ps-teacher-gen') || '1');
+      const teacherPeerId = `ps-${this.roomCode}-t-${teacherGen}`;
       
       // Close previous media connection if any
       if (this.teacherMediaConn) {
@@ -578,13 +716,20 @@ class PeerManager {
   async _reinitialize() {
     try {
       if (this.role === 'teacher') {
-        const peerId = `ps-${this.roomCode}-t`;
+        // 교사 재초기화 시에도 gen을 증가
+        this._teacherGen++;
+        localStorage.setItem('ps-teacher-gen', String(this._teacherGen));
+        const peerId = `ps-${this.roomCode}-t-${this._teacherGen}`;
         await this._initPeer(peerId);
         this._setupTeacherListeners();
+        this._startTeacherHeartbeat();
       } else {
         const peerId = `ps-${this.roomCode}-s-${this._randomId()}`;
         await this._initPeer(peerId);
-        this._connectToTeacher();
+        // 교사 찾기
+        const latestGen = parseInt(localStorage.getItem('ps-teacher-gen') || String(this._lastKnownTeacherGen));
+        const tryGen = Math.max(latestGen, this._lastKnownTeacherGen);
+        this._connectToTeacherByGen(tryGen);
       }
     } catch (err) {
       console.error('[PeerManager] Reinitialize failed:', err);
@@ -622,6 +767,9 @@ class PeerManager {
    */
   destroy() {
     this._destroyed = true;
+
+    // 하트비트 중지
+    this._stopHeartbeat();
 
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);

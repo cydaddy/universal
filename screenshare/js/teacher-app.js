@@ -345,6 +345,13 @@
     }
   });
 
+  // pagehide is more reliable than beforeunload on some browsers (Safari, mobile)
+  window.addEventListener('pagehide', () => {
+    if (state.classroomKey) {
+      peerManager.destroy();
+    }
+  });
+
   /* ------------------------------------------
      START
      ------------------------------------------ */
