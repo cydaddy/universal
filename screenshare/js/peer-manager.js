@@ -47,6 +47,7 @@ class PeerManager {
     this.role = 'teacher';
     this.myName = name;
     this.roomCode = this._getClassroomKey();
+    this._maxReconnectAttempts = 999; // 교사 시그널링 서버 연결 무제한 재시도
 
     const peerId = `ps-${this.roomCode}-t`;
     const maxRetries = 10;
@@ -86,6 +87,7 @@ class PeerManager {
     this.role = 'student';
     this.myName = name;
     this.roomCode = this._getClassroomKey();
+    this._maxReconnectAttempts = 999; // 학생도 무제한 재연결 시도
 
     const peerId = `ps-${this.roomCode}-s-${this._randomId()}`;
     await this._initPeer(peerId);
@@ -127,8 +129,24 @@ class PeerManager {
         }
 
         if (err.type === 'peer-unavailable') {
-          // Student can't find teacher
-          this._notifyError('선생님이 아직 수업을 시작하지 않았습니다. 선생님이 수업 시작 버튼을 누른 뒤 다시 접속해 주세요.');
+          if (this.role === 'student') {
+            console.warn('[PeerManager] Teacher is offline. Scheduling reconnect...');
+            this._notifyStatus('disconnected');
+            
+            // Clean up any failed/half-open connections
+            if (this.teacherDataConn) {
+              try { this.teacherDataConn.close(); } catch {}
+              this.teacherDataConn = null;
+            }
+            if (this.teacherMediaConn) {
+              try { this.teacherMediaConn.close(); } catch {}
+              this.teacherMediaConn = null;
+            }
+            
+            this._scheduleTeacherReconnect();
+          } else {
+            this._notifyError('대상 피어를 찾을 수 없습니다.');
+          }
           return;
         }
 
@@ -324,6 +342,7 @@ class PeerManager {
      ------------------------------------------ */
 
   _connectToTeacher() {
+    this._notifyStatus('connecting');
     const teacherPeerId = `ps-${this.roomCode}-t`;
 
     // Data connection
@@ -374,6 +393,12 @@ class PeerManager {
     this.teacherDataConn.on('close', () => {
       console.log('[Student] Disconnected from teacher, will retry...');
       this._notifyStatus('disconnected');
+
+      if (this.teacherMediaConn) {
+        try { this.teacherMediaConn.close(); } catch {}
+        this.teacherMediaConn = null;
+      }
+
       if (!this._destroyed) {
         // 교사 재접속을 기다리며 지속 재시도 (포기하지 않음)
         this._reconnectAttempts = 0; // 포기하지 않도록 카운터 초기화
@@ -401,11 +426,11 @@ class PeerManager {
       this._reconnectTimer = null;
       if (this._destroyed) return;
 
-      if (this.peer && !this.peer.destroyed) {
-        // Peer 자체는 살아있으면 바로 재연결 시도
+      if (this.peer && !this.peer.destroyed && !this.peer.disconnected) {
+        // Peer 자체는 살아있고 시그널링 서버에도 연결되어 있으면 바로 재연결 시도
         this._connectToTeacher();
       } else {
-        // Peer가 죽었으면 전체 재초기화
+        // Peer가 죽었거나 시그널링 서버와 끊겼으면 전체 재초기화
         this._reinitialize();
       }
     }, delay);
@@ -424,36 +449,55 @@ class PeerManager {
     }
 
     try {
-      // 2. Simplified & universally compatible screen sharing constraints
-      this.localStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'monitor', // Nudge entire screen
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 15, max: 30 }
-        },
-        audio: false
-      });
+      // Check if existing localStream is active
+      let isStreamActive = false;
+      if (this.localStream) {
+        const videoTrack = this.localStream.getVideoTracks()[0];
+        if (videoTrack && videoTrack.readyState === 'live') {
+          isStreamActive = true;
+        }
+      }
 
-      // 3. Strict validation: Verify if the shared surface is the entire screen ('monitor' or 'screen')
-      const videoTrack = this.localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        const settings = videoTrack.getSettings();
-        console.log('[PeerManager] Video track settings:', settings);
-        
-        // If displaySurface is available and is NOT 'monitor' or 'screen', reject it.
-        const isMonitor = settings.displaySurface === 'monitor' || settings.displaySurface === 'screen';
-        if (settings && settings.displaySurface && !isMonitor) {
-          // Immediately stop all tracks to release resource
-          this.localStream.getTracks().forEach(track => track.stop());
-          this.localStream = null;
+      if (isStreamActive) {
+        console.log('[PeerManager] Reusing existing active localStream');
+      } else {
+        // 2. Simplified & universally compatible screen sharing constraints
+        this.localStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: 'monitor', // Nudge entire screen
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 15, max: 30 }
+          },
+          audio: false
+        });
+
+        // 3. Strict validation: Verify if the shared surface is the entire screen ('monitor' or 'screen')
+        const videoTrack = this.localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          const settings = videoTrack.getSettings();
+          console.log('[PeerManager] Video track settings:', settings);
           
-          const err = new Error('NOT_MONITOR');
-          throw err;
+          // If displaySurface is available and is NOT 'monitor' or 'screen', reject it.
+          const isMonitor = settings.displaySurface === 'monitor' || settings.displaySurface === 'screen';
+          if (settings && settings.displaySurface && !isMonitor) {
+            // Immediately stop all tracks to release resource
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+            
+            const err = new Error('NOT_MONITOR');
+            throw err;
+          }
         }
       }
 
       const teacherPeerId = `ps-${this.roomCode}-t`;
+      
+      // Close previous media connection if any
+      if (this.teacherMediaConn) {
+        try { this.teacherMediaConn.close(); } catch {}
+      }
+      
       this.teacherMediaConn = this.peer.call(teacherPeerId, this.localStream);
 
       // Notify teacher about sharing status

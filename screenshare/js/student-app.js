@@ -172,13 +172,17 @@
       }
 
       // 화면 공유가 브라우저 제어판이나 외부 원인에 의해 중단될 때 처리 (재공유 강제)
-      stream.getVideoTracks()[0].addEventListener('ended', () => {
-        stopSharing();
-        
-        // 화면 공유 끄기 방지: 즉시 1초 후 자동 화면 공유 유도
-        ui.showToast('수업 모니터링을 위해 전체 화면 공유를 다시 시작합니다...', 'info');
-        setTimeout(() => autoStartSharing(), 1000);
-      });
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && !videoTrack._hasEndedListener) {
+        videoTrack._hasEndedListener = true;
+        videoTrack.addEventListener('ended', () => {
+          stopSharing();
+          
+          // 화면 공유 끄기 방지: 즉시 1초 후 자동 화면 공유 유도
+          ui.showToast('수업 모니터링을 위해 전체 화면 공유를 다시 시작합니다...', 'info');
+          setTimeout(() => autoStartSharing(), 1000);
+        });
+      }
     } catch (err) {
       console.error('[StudentApp] Share failed:', err);
       // 공유에 실패했거나 취소되었을 경우 UI 초기 상태 복구
@@ -223,13 +227,13 @@
 
     // 교사가 재접속했을 때 → 화면 공유 자동 재개
     peerManager.onTeacherReconnected = () => {
-      console.log('[StudentApp] Teacher reconnected, re-starting screen share...');
-      ui.showToast('선생님이 재접속하셨습니다. 화면 공유를 다시 시작합니다...', 'info');
-      if (state.isSharing) {
-        // 기존 공유가 끊긴 상태이므로 상태를 초기화하고 재시작
-        stopSharing();
-      }
-      setTimeout(() => autoStartSharing(), 800);
+      console.log('[StudentApp] Teacher reconnected, resuming screen share...');
+      ui.showToast('선생님이 재접속하셨습니다. 화면 공유를 재개합니다...', 'info');
+      setTimeout(() => {
+        startSharing().catch(err => {
+          console.error('[StudentApp] Failed to resume screen share:', err);
+        });
+      }, 800);
     };
 
     peerManager.onConnectionStatusChanged = (status) => {
