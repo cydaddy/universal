@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>발표 폭탄 게임 💣</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
+        :root {
+            --bg-color: #e0e5ec;
+            --text-color: #4a4a4a;
+            --clay-bg: #e0e5ec;
+            --shadow-outer: 9px 9px 16px rgb(163, 177, 198, 0.6), -9px -9px 16px rgba(255, 255, 255, 0.5);
+            --shadow-inner: inset 6px 6px 10px 0 rgba(255, 255, 255, 0.5), inset -6px -6px 10px 0 rgba(0, 0, 0, 0.1);
+            --btn-blue: #a3c2fa;
+            --btn-red: #ffb3b3;
+            --btn-green: #b3e6b3;
+            --btn-gray: #d9d9d9;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Jua', sans-serif;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .clay {
+            background-color: var(--clay-bg);
+            border-radius: 24px;
+            box-shadow: var(--shadow-outer), var(--shadow-inner);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .clickable {
+            cursor: pointer;
+        }
+
+        .clickable:active {
+            box-shadow: inset 6px 6px 10px 0 rgba(0, 0, 0, 0.1), inset -6px -6px 10px 0 rgba(255, 255, 255, 0.5);
+            transform: scale(0.96);
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        .header {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .header-btn {
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .btn-end {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+        .info-panel {
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+            font-size: 2.5rem;
+            color: #333;
+            font-weight: bold;
+        }
+
+        #student-group {
+            font-size: 1.2rem;
+            color: #888;
+            margin-bottom: 5px;
+            font-weight: normal;
+        }
+
+        .bomb-container {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7rem;
+            position: relative;
+        }
+
+        .prob-badge {
+            position: absolute;
+            bottom: -15px;
+            background: #ffcc00;
+            color: #d32f2f;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            box-shadow: var(--shadow-outer);
+            transition: all 0.3s;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 20px;
+            font-size: 1.8rem;
+            text-align: center;
+        }
+
+        .btn-pass {
+            background-color: var(--btn-blue);
+            color: #1a4b99;
+        }
+
+        .btn-explode {
+            background-color: var(--btn-red);
+            color: #991a1a;
+        }
+
+        .btn-green {
+            background-color: var(--btn-green);
+            color: #1a661a;
+            width: 100%;
+            padding: 15px;
+            font-size: 1.5rem;
+        }
+
+        .btn-gray {
+            background-color: var(--btn-gray);
+            color: #333;
+            width: 100%;
+            padding: 15px;
+            font-size: 1.5rem;
+            margin-top: 10px;
+        }
+
+        /* 모달 공통 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(224, 229, 236, 0.9);
+            z-index: 100;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            width: 90%;
+            max-width: 400px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            border-radius: 12px;
+            padding: 15px;
+            border: none;
+            outline: none;
+            background: var(--clay-bg);
+            box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.1), inset -4px -4px 8px rgba(255, 255, 255, 0.7);
+            font-size: 1.2rem;
+            resize: none;
+        }
+
+        #final-score-list {
+            width: 100%;
+            text-align: center;
+            max-height: 50vh;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.4rem;
+            padding: 10px;
+            border-bottom: 1px dashed #ccc;
+        }
+
+        .score-row:first-child {
+            font-weight: bold;
+            color: #d32f2f;
+            font-size: 1.6rem;
+        }
+
+        /* 결과 팝업 */
+        #result-modal {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+        }
+
+        .result-text {
+            font-size: 4rem;
+            color: #fff;
+            text-align: center;
+            word-break: keep-all;
+            text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff;
+            animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .point-text {
+            font-size: 2.2rem;
+            color: #ffd700;
+            margin-top: 20px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        @keyframes pop {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
+        }
+
+        @keyframes shake {
+
+            10%,
+            90% {
+                transform: translate3d(-2px, 0, 0);
+            }
+
+            20%,
+            80% {
+                transform: translate3d(4px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                transform: translate3d(-8px, 0, 0);
+            }
+
+            40%,
+            60% {
+                transform: translate3d(8px, 0, 0);
+            }
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+            animation: particleAnim 0.6s ease-out forwards;
+            z-index: 1000;
+        }
+
+        @keyframes particleAnim {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(3);
+                opacity: 0;
+            }
+        }
+
+        .floating-score {
+            position: absolute;
+            font-size: 3.5rem;
+            font-weight: bold;
+            pointer-events: none;
+            animation: floatUp 1.2s ease-out forwards;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            z-index: 50;
+            white-space: nowrap;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+
+            20% {
+                transform: translateY(-30px) scale(1.2);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-120px) scale(1.5);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <div class="header">
+            <div class="clay header-btn clickable" onclick="openSettings()">⚙️ 설정</div>
+            <div class="clay header-btn btn-end clickable" onclick="endGame()">🛑 종료</div>
+        </div>
+
+        <div class="clay info-panel">
+            <div id="student-group">데이터를 입력해주세요</div>
+            <div id="student-name">학생 이름</div>
+        </div>
+
+        <div class="clay bomb-container" id="bomb-img">
+            💣
+            <div class="prob-badge">확률: <span id="prob-text">10%</span></div>
+        </div>
+
+        <div class="action-buttons">
+            <div class="clay action-btn btn-pass clickable" onclick="handleChoice('pass')">넘겨요 💦</div>
+            <div class="clay action-btn btn-explode clickable" onclick="handleChoice('explode')">터져요 🔥</div>
+        </div>
+    </div>
+
+    <!-- 설정 모달 -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="clay modal-content">
+            <h2 style="margin:0;">👥 학생 명단 입력</h2>
+            <p style="font-size:1rem; color:#666; margin:0; text-align:center;">
+                형식: [모둠명] 학생1, 학생2...<br>(저장 시 모둠 점수가 0점으로 초기화됩니다)
+            </p>
+            <textarea id="students-input" placeholder="1모둠: 김철수, 이영희&#10;2모둠: 박민수, 최지연"></textarea>
+            <div class="clay action-btn btn-green clickable" onclick="saveSettings()">저장 및 시작</div>
+            <div class="clay action-btn btn-gray clickable" onclick="closeSettings()">닫기</div>
+        </div>
+    </div>
+
+    <!-- 종료(최종 점수) 모달 -->
+    <div id="final-modal" class="modal-overlay">
+        <div class="clay modal-content" style="max-width: 450px;">
+            <h1 style="margin:0; color:#1a4b99;">🏆 최종 점수 🏆</h1>
+            <div id="final-score-list"></div>
+            <div class="clay action-btn btn-green clickable" onclick="closeFinal()">게임 계속하기</div>
+        </div>
+    </div>
+
+    <!-- 발표 당첨(결과) 모달 -->
+    <div id="result-modal" class="modal-overlay" onclick="closeResult()">
+        <div class="result-text clickable" id="result-title">🎉 발 표! 🎉</div>
+        <div class="point-text" id="result-point">점수 변동내역</div>
+        <p style="color:#aaa; margin-top:30px; font-size:1.2rem;">(화면을 터치하면 다음 학생으로 넘어갑니다)</p>
+    </div>
+
+    <script>
+        // --- 웹 오디오 API ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playTone(freq, type, duration, vol = 0.1) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playClick() { playTone(600, 'sine', 0.1, 0.1); }
+        function playPassSuccess() { playTone(800, 'triangle', 0.3, 0.1); setTimeout(() => playTone(1200, 'triangle', 0.4, 0.1), 150); }
+        function playPassFail() { playTone(300, 'sawtooth', 0.5, 0.2); setTimeout(() => playTone(200, 'sawtooth', 0.8, 0.2), 200); }
+        function playExplodeFail() { playTone(400, 'square', 0.2, 0.1); setTimeout(() => playTone(300, 'square', 0.4, 0.1), 100); }
+        function playFanfare() {
+            playTone(523.25, 'square', 0.2, 0.2);
+            setTimeout(() => { playTone(659.25, 'square', 0.2, 0.2); }, 200);
+            setTimeout(() => { playTone(783.99, 'square', 0.4, 0.2); }, 400);
+        }
+
+        function playExplosion() {
+            if (!audioCtx) return;
+            const bufferSize = audioCtx.sampleRate * 1.5;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.start();
+
+            setTimeout(() => playFanfare(), 500);
+        }
+
+        // --- 클릭 이펙트 ---
+        document.addEventListener('mousedown', function (e) {
+            const isClickable = e.target.closest('.clickable') || e.target.closest('#result-modal');
+            if (!isClickable) return;
+
+            initAudio();
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = e.pageX - 15 + 'px';
+            particle.style.top = e.pageY - 15 + 'px';
+            particle.style.width = '30px';
+            particle.style.height = '30px';
+
+            const colors = ['#ffb3b3', '#a3c2fa', '#b3e6b3', '#ffcc00'];
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+
+            document.body.appendChild(particle);
+            setTimeout(() => particle.remove(), 600);
+        });
+
+        // --- 게임 로직 ---
+        let students = [];
+        let groupScores = {};
+        let currentStudent = null;
+        let currentProbability = 10;
+        let isProcessing = false;
+
+        // --- 공정한 순서 큐 ---
+        let studentQueue = [];  // 셔플된 학생 큐
+
+        function shuffleArray(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function refillQueue() {
+            studentQueue = shuffleArray(students);
+        }
+
+        function resetProbability() {
+            currentProbability = Math.floor(Math.random() * 3) + 2; // 2~4% 시작
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('bombStudents');
+            if (saved) {
+                document.getElementById('students-input').value = saved;
+                parseStudents(saved);
+            } else {
+                document.getElementById('students-input').value = "1모둠: 유재석, 강호동\n2모둠: 아이유, 박보검";
+                parseStudents(document.getElementById('students-input').value);
+            }
+            refillQueue();
+            resetProbability();
+            nextStudent();
+        }
+
+        function parseStudents(text) {
+            students = [];
+            groupScores = {};
+            const lines = text.split('\n');
+            lines.forEach(line => {
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    const group = parts[0].trim();
+                    const names = parts[1].split(',').map(n => n.trim()).filter(n => n !== "");
+
+                    if (!groupScores[group]) groupScores[group] = 0;
+
+                    names.forEach(name => {
+                        students.push({ group, name });
+                    });
+                }
+            });
+        }
+
+        function openSettings() { playClick(); document.getElementById('settings-modal').style.display = 'flex'; }
+        function closeSettings() { playClick(); document.getElementById('settings-modal').style.display = 'none'; }
+        function saveSettings() {
+            playClick();
+            const text = document.getElementById('students-input').value;
+            localStorage.setItem('bombStudents', text);
+            parseStudents(text);
+            refillQueue();
+            document.getElementById('settings-modal').style.display = 'none';
+            resetProbability();
+            nextStudent();
+        }
+
+        function endGame() {
+            playClick();
+            if (Object.keys(groupScores).length === 0) return;
+
+            const sortedGroups = Object.keys(groupScores).sort((a, b) => groupScores[b] - groupScores[a]);
+            let html = "";
+            sortedGroups.forEach((group, index) => {
+                let rankMedal = index === 0 ? "🥇 " : index === 1 ? "🥈 " : index === 2 ? "🥉 " : "🔸 ";
+                html += `<div class="score-row"><span>${rankMedal}${group}</span><span>${groupScores[group]} 점</span></div>`;
+            });
+
+            document.getElementById('final-score-list').innerHTML = html;
+            playFanfare();
+            document.getElementById('final-modal').style.display = 'flex';
+        }
+
+        function closeFinal() { playClick(); document.getElementById('final-modal').style.display = 'none'; }
+
+        function nextStudent() {
+            if (students.length === 0) {
+                document.getElementById('student-group').innerText = "데이터 없음";
+                document.getElementById('student-name').innerText = "설정에서 명단 추가";
+                return;
+            }
+            // 큐가 비었으면 다시 셔플해서 채움 (모든 학생이 한 바퀴 돌아야 다시 시작)
+            if (studentQueue.length === 0) {
+                refillQueue();
+            }
+            currentStudent = studentQueue.pop();
+
+            document.getElementById('student-group').innerText = currentStudent.group;
+            document.getElementById('student-name').innerText = currentStudent.name;
+            document.getElementById('prob-text').innerText = currentProbability + "%";
+            document.getElementById('bomb-img').childNodes[0].nodeValue = "💣\n            ";
+        }
+
+        function showFloatingScore(text, color) {
+            const scoreEl = document.createElement('div');
+            scoreEl.className = 'floating-score';
+            scoreEl.innerText = text;
+            scoreEl.style.color = color;
+
+            const bombRect = document.getElementById('bomb-img').getBoundingClientRect();
+            // 글자 길이에 맞춰 가운데 정렬을 위해 텍스트 길이 비례 오프셋 적용
+            scoreEl.style.left = (bombRect.left + bombRect.width / 2 - 50) + 'px';
+            scoreEl.style.top = (bombRect.top + bombRect.height / 2) + 'px';
+
+            document.body.appendChild(scoreEl);
+            setTimeout(() => scoreEl.remove(), 1200);
+        }
+
+        function handleChoice(choice) {
+            if (isProcessing || students.length === 0) return;
+            isProcessing = true;
+            playClick();
+
+            const bomb = document.getElementById('bomb-img');
+            bomb.classList.add('shake');
+
+            setTimeout(() => {
+                bomb.classList.remove('shake');
+
+                const roll = Math.floor(Math.random() * 100);
+                const isExplode = roll < currentProbability;
+                const curGroup = currentStudent.group;
+
+                // === 점수 계산 (잭팟 & 설레발 시스템) ===
+                const p = currentProbability;
+
+                // 터졌을 때
+                if (isExplode) {
+                    bomb.childNodes[0].nodeValue = "💥\n            ";
+                    playExplosion();
+
+                    let scoreText = "";
+                    let pointText = "";
+                    let scoreAdd = 0;
+
+                    if (choice === 'pass') {
+                        scoreAdd = -10;
+                        scoreText = `${scoreAdd}점 (넘기기 실패!)`;
+                        pointText = "폭탄이 터져버렸습니다 😭";
+                        showFloatingScore(`${scoreAdd}`, "#ff4444");
+                    } else {
+                        // 터져요를 골라서 터짐
+                        if (p <= 30) {
+                            scoreAdd = 50;
+                            scoreText = `+${scoreAdd}점 (기적의 잭팟!)🎰`;
+                            pointText = "대담한 선택! 놀라운 선택입니다! 🤩🎉";
+                            showFloatingScore(`+${scoreAdd} 🎉`, "#ff00ff");
+                        } else if (p <= 60) {
+                            scoreAdd = 20;
+                            scoreText = `+${scoreAdd}점 (훌륭한 예측!)`;
+                            pointText = "정확한 타이밍에 터뜨렸습니다! 🤩";
+                            showFloatingScore(`+${scoreAdd}`, "#00ff00");
+                        } else {
+                            scoreAdd = 10;
+                            scoreText = `+${scoreAdd}점 (안전빵 예측!)`;
+                            pointText = "모두가 예상한 결과입니다! 👏";
+                            showFloatingScore(`+${scoreAdd}`, "#00bfff");
+                        }
+                    }
+
+                    groupScores[curGroup] += scoreAdd;
+
+                    setTimeout(() => {
+                        document.getElementById('result-title').innerText = `🎉 ${currentStudent.name} 발표! 🎉`;
+                        document.getElementById('result-point').innerHTML = `${curGroup} : ${scoreText}<br><br>${pointText}`;
+                        document.getElementById('result-modal').style.display = 'flex';
+                        resetProbability();
+                    }, 800);
+
+                }
+                // 안 터졌을 때
+                else {
+                    let willIncreaseProb = true; // 확률 증가 여부
+
+                    if (choice === 'pass') {
+                        let scoreAdd = 0;
+                        if (p > 60) {
+                            scoreAdd = 50;
+                            showFloatingScore(`+${scoreAdd} 강심장!`, "#ff00ff");
+                        } else if (p > 30) {
+                            scoreAdd = 20;
+                            showFloatingScore(`+${scoreAdd} ✌️`, "#00ff00");
+                        } else {
+                            scoreAdd = 10;
+                            showFloatingScore(`+${scoreAdd}`, "#00bfff");
+                        }
+                        groupScores[curGroup] += scoreAdd;
+                        playPassSuccess();
+                    } else {
+                        // 터져요를 골랐는데 안 터짐 -> 설레발 페널티! (-10점)
+                        const scoreAdd = -10;
+                        groupScores[curGroup] += scoreAdd;
+                        playExplodeFail();
+                        showFloatingScore(`${scoreAdd}`, "#ff4444");
+                        willIncreaseProb = false; // 확률 증가 안함 (핵심 조건)
+                    }
+
+                    if (willIncreaseProb) {
+                        const randomIncrease = Math.floor(currentProbability * 0.5) + Math.floor(Math.random() * 6) + 3;
+                        currentProbability = Math.min(100, currentProbability + randomIncrease);
+
+                        const probBadge = document.querySelector('.prob-badge');
+                        probBadge.style.transform = 'scale(1.3)';
+                        probBadge.style.color = '#ff0000';
+
+                        setTimeout(() => {
+                            probBadge.style.transform = 'scale(1)';
+                            probBadge.style.color = '#d32f2f';
+                            isProcessing = false;
+                            nextStudent();
+                        }, 1000);
+                    } else {
+                        // 확률을 올리지 않고 그냥 넘어감 (빠르게 진행)
+                        setTimeout(() => {
+                            isProcessing = false;
+                            nextStudent();
+                        }, 1000);
+                    }
+                }
+            }, 500);
+        }
+
+        function closeResult() {
+            document.getElementById('result-modal').style.display = 'none';
+            isProcessing = false;
+            nextStudent();
+        }
+
+        window.onload = loadData;
+
+    </script>
+</body>
+
+</html>

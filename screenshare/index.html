@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ParkShare - 교실 화면 공유</title>
+  <meta name="description" content="WebRTC 기반 서버리스 교실 화면 공유. 학생 크롬북 화면을 실시간으로 모니터링하세요.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <!-- ============================================
+       TEACHER DASHBOARD VIEW
+       ============================================ -->
+  <section id="teacher-view" class="view active">
+    <!-- Grid -->
+    <div class="dashboard-main">
+      <div class="screen-grid" id="screen-grid">
+        <div class="empty-state" id="empty-state">
+          <span class="empty-icon">📡</span>
+          <h3>학생을 기다리는 중...</h3>
+          <p>학생들에게 접속하라고 알려주세요</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Bar (좌측 정렬) -->
+    <div class="bottom-bar">
+      <div class="bottom-bar-left">
+        <span class="bar-brand">ParkShare</span>
+        <button class="room-badge" id="student-guide-btn" title="클릭하여 학생 접속 주소 복사">
+          <span>🔗 학생 접속:</span>
+          <span id="display-student-url">student.html</span>
+          <span class="copy-icon" style="margin-left: 5px;">📋</span>
+        </button>
+        <div class="student-count">
+          <span>👥</span>
+          <span id="student-count-text">0명 접속</span>
+        </div>
+        <button class="tool-btn" id="btn-compare-view" title="선택한 학생들의 화면만 모아 보봅니다" disabled>
+          <span class="btn-icon">👁️</span>
+          <span class="btn-text">선택 화면 보기 (0)</span>
+        </button>
+        <!-- 링크 전송 버튼 -->
+        <button class="tool-btn" id="btn-send-link" title="학생들에게 링크 전송">
+          <span class="btn-icon">🔗</span>
+          <span class="btn-text">링크 보내기</span>
+        </button>
+        <button class="tool-btn danger" id="btn-leave" title="나가기">
+          <span class="btn-icon">🚪</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 링크 전송 모달 -->
+  <div class="link-modal" id="link-modal" style="display:none;">
+    <div class="link-modal-content">
+      <div class="link-modal-header">
+        <span>🔗 학생에게 링크 전송</span>
+        <button class="spotlight-close" id="btn-link-modal-close">✕</button>
+      </div>
+      <div class="link-modal-body">
+        <p style="font-size:0.85rem; color: var(--text-muted); margin-bottom: 10px;">접속중인 모든 학생의 크롬에서 새 탭으로 열립니다.</p>
+        <div class="link-input-row">
+          <input type="url" id="input-link-url" placeholder="https://..." autocomplete="off" />
+          <button class="tool-btn primary" id="btn-link-send">
+            <span>📤</span>
+            <span>전송</span>
+          </button>
+        </div>
+        <div class="link-presets">
+          <span style="font-size:0.78rem; color: var(--text-muted)">자주 쓰는 링크:</span>
+          <div id="link-preset-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- ============================================
+       SPOTLIGHT OVERLAY
+       ============================================ -->
+  <div class="spotlight-overlay" id="spotlight-overlay">
+    <div class="spotlight-header">
+      <div class="spotlight-name" id="spotlight-name">
+        <span>🔍</span>
+        <span>학생 이름</span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="card-action-btn" id="btn-spotlight-snapshot" title="스냅샷">📸</button>
+        <button class="spotlight-close" id="btn-spotlight-close" title="닫기">✕</button>
+      </div>
+    </div>
+    <div class="spotlight-video-container">
+      <video id="spotlight-video" autoplay playsinline></video>
+    </div>
+    <div class="spotlight-thumbnails" id="spotlight-thumbnails"></div>
+  </div>
+
+  <!-- ============================================
+       COMPARISON OVERLAY
+       ============================================ -->
+  <div class="spotlight-overlay" id="comparison-overlay">
+    <div class="spotlight-header">
+      <div class="spotlight-name" id="comparison-title">
+        <span>👁️</span>
+        <span>선택 화면 집중 모니터링</span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="spotlight-close" id="btn-comparison-close" title="닫기">✕</button>
+      </div>
+    </div>
+    <div class="comparison-grid-container">
+      <div class="screen-grid" id="comparison-grid"></div>
+    </div>
+  </div>
+
+
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ============================================
+       SCRIPTS
+       ============================================ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+  <script src="js/peer-manager.js?v=3"></script>
+  <script src="js/tools.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/teacher-app.js?v=3"></script>
+</body>
+</html>

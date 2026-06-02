@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ParkShare - 학생 화면 공유</title>
+  <meta name="description" content="ParkShare 학생 화면 공유 페이지. 선생님에게 내 전체화면을 실시간으로 전송하세요.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <!-- ============================================
+       LOBBY VIEW (STUDENT)
+       ============================================ -->
+  <section id="lobby-view" class="view active">
+    <div class="lobby-card">
+      <div class="lobby-logo">
+        <h1>ParkShare</h1>
+        <p>학생용 접속 페이지 · 전체화면 공유</p>
+      </div>
+
+      <!-- Name Input -->
+      <div class="form-group">
+        <label class="form-label" for="input-name">내 이름</label>
+        <input type="text" id="input-name" class="form-input" placeholder="이름을 입력하세요 (예: 홍길동)" maxlength="20" autocomplete="off">
+      </div>
+
+      <!-- Join Button -->
+      <button class="btn-primary" id="btn-join" disabled>수업 참가하기</button>
+
+      <!-- Connection Status -->
+      <div class="connection-status" id="lobby-status">
+        <span class="status-dot" id="lobby-status-dot"></span>
+        <span id="lobby-status-text">이름을 입력해 주세요</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       STUDENT VIEW
+       ============================================ -->
+  <section id="student-view" class="view">
+    <div class="student-main">
+      <div class="share-btn-container" id="share-btn-container">
+        <button class="share-btn" id="btn-share-screen">
+          <span class="share-icon">🖥️</span>
+          <span>화면 공유</span>
+        </button>
+        <p class="share-status-text" id="share-status-text">선생님 수업에 접속했습니다. 화면 공유를 시작합니다...</p>
+      </div>
+
+      <div class="student-preview" id="student-preview">
+        <video id="student-preview-video" autoplay muted playsinline></video>
+      </div>
+    </div>
+
+    <!-- Bottom Bar (좌측 정렬) -->
+    <div class="bottom-bar">
+      <div class="bottom-bar-left">
+        <span class="bar-brand">ParkShare</span>
+        <div class="connection-status" style="margin-top:0;">
+          <span class="status-dot" id="student-status-dot"></span>
+          <span id="student-status-text">연결 대기 중</span>
+        </div>
+      </div>
+      <div class="bottom-bar-right">
+        <button class="tool-btn danger" id="btn-student-leave" title="나가기">
+          <span class="btn-icon">🚪</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ============================================
+       SCRIPTS
+       ============================================ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+  <script src="js/peer-manager.js?v=3"></script>
+  <script src="js/tools.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/student-app.js?v=3"></script>
+</body>
+</html>
